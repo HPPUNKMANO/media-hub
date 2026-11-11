@@ -533,3 +533,5 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
 
 .journal-cols .lead-story h3 { font-size: clamp(26px, 2.4vw, 34px); }
 .journal-cols .lead-story .art-img { min-height: 280px; }
+
+.ch-name .hd { font: 600 9px/1 var(--mono); letter-spacing: .06em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); padding: 2px 4px; border-radius: 3px; vertical-align: 2px; }

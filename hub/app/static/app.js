@@ -240,7 +240,9 @@ async function playTV(id) {
   v.onplaying = () => { $("#tv-msg").hidden = true; };
   tvHls?.destroy(); tvHls = null;
   if (window.Hls && Hls.isSupported()) {
-    tvHls = new Hls({ lowLatencyMode: false, backBufferLength: 30 });
+    // best picture: start at the highest quality and never cap it to the player size
+    tvHls = new Hls({ lowLatencyMode: false, backBufferLength: 30, capLevelToPlayerSize: false, abrEwmaDefaultEstimate: 12e6, startLevel: -1 });
+    tvHls.on(Hls.Events.MANIFEST_PARSED, (_, data) => { if (data.levels?.length > 1) { tvHls.startLevel = data.levels.length - 1; tvHls.nextLevel = data.levels.length - 1; } });
     tvHls.on(Hls.Events.ERROR, (_, e) => { if (e.fatal) { $("#tv-msg").hidden = false; $("#tv-msg").textContent = "This channel is off the air right now — try another one."; } });
     tvHls.loadSource(r.src); tvHls.attachMedia(v);
   } else { v.src = r.src; }   // Safari / iPhone play HLS natively
@@ -571,7 +573,7 @@ const pages = {
       $("#tv-grid").innerHTML = d.channels.filter((c) => c.group === group).map((c) => `
         <a class="ch${tvNow && tvNow.id === c.id ? " on" : ""}" href="#tv" data-ch="${c.id}" title="${esc(c.name)}">
           <div class="ch-logo">${c.logo ? `<img src="${esc(c.logo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{textContent:'${esc(c.name.slice(0, 2).toUpperCase())}'}))">` : `<span>${esc(c.name.slice(0, 2).toUpperCase())}</span>`}</div>
-          <div class="ch-name">${esc(c.name.replace(/ by Pluto TV$/, ""))}</div><div class="ch-sub">${/Pluto/.test(c.name) ? "Pluto TV" : esc(c.group)}</div></a>`).join("");
+          <div class="ch-name">${esc(c.name.replace(/ by Pluto TV$/, ""))}${c.height >= 720 ? ` <span class="hd">${c.height >= 1080 ? "FULL HD" : "HD"}</span>` : ""}</div><div class="ch-sub">${/Pluto/.test(c.name) ? "Pluto TV" : esc(c.group)}</div></a>`).join("");
     };
     $("#tv-chips").onclick = (e) => { const b = e.target.closest(".chip"); if (b) { group = b.dataset.g; draw(); } };
     draw();

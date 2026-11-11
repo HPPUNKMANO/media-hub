@@ -44,13 +44,15 @@ def channels() -> list[dict]:
                 ua = line.split("=", 1)[1]
             elif line.startswith("http") and inf:
                 name = inf.rsplit('",', 1)[-1] if '",' in inf else inf.split(",", 1)[-1]
+                q = re.search(r"\((\d+)[pi]\)", name)
+                height = int(q.group(1)) if q else 0
                 name = re.sub(r"\s*\((\d+p|\d+i)\)", "", name).replace("[Not 24/7]", "").strip()
                 g = re.search(r'group-title="([^"]*)"', inf)
                 logo = re.search(r'tvg-logo="([^"]*)"', inf)
                 ref = re.search(r'http-referrer="([^"]*)"', inf)
                 out.append({"id": len(out), "name": name, "group": g.group(1) if g else "Autres",
                             "logo": logo.group(1) if logo else "", "url": line.strip(), "ua": ua,
-                            "referrer": ref.group(1) if ref else ""})
+                            "referrer": ref.group(1) if ref else "", "height": height})
                 inf = None
         _cache.update(mtime=mtime, channels=out)
     return _cache["channels"]
@@ -84,7 +86,8 @@ def _rewrite(playlist: str, base: str, cid: int) -> str:
 async def list_channels():
     chs = channels()
     groups = sorted({c["group"] for c in chs}, key=lambda g: (GROUP_ORDER.index(g) if g in GROUP_ORDER else 99, g))
-    return {"groups": groups, "channels": [{k: c[k] for k in ("id", "name", "group", "logo")} for c in chs]}
+    best_first = sorted(chs, key=lambda c: -c.get("height", 0))   # HD channels first in every category
+    return {"groups": groups, "channels": [{k: c.get(k) for k in ("id", "name", "group", "logo", "height")} for c in best_first]}
 
 
 @router.get("/api/tv/play/{cid}")
