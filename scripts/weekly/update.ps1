@@ -104,4 +104,12 @@ if (Test-Path $cand) {
 try { Invoke-RestMethod http://localhost:8096/Library/Refresh -Method Post -Headers $jfH | Out-Null; Log "jellyfin: library scan started" } catch { Log "jellyfin: scan failed" }
 try { $t = (Invoke-RestMethod http://localhost:8096/ScheduledTasks -Headers $jfH) | Where-Object Key -eq "RefreshGuide"; Invoke-RestMethod "http://localhost:8096/ScheduledTasks/Running/$($t.Id)" -Method Post -Headers $jfH | Out-Null; Log "jellyfin: tv guide refresh started" } catch { Log "jellyfin: guide refresh failed" }
 try { $q = "u=$ndUser&p=" + [uri]::EscapeDataString($ndPass) + "&v=1.16.1&c=weekly&f=json"; Invoke-RestMethod "http://localhost:4533/rest/startScan?$q" | Out-Null; Log "navidrome: scan started" } catch { Log "navidrome: scan failed" }
+# ---------------------------------------------------------------- 6. GitHub backup (code + settings only; .env and media are never sent)
+try {
+  $git = "C:\Program Files\Git\cmd\git.exe"
+  Push-Location $root
+  & $git add -A
+  & $git diff --cached --quiet; if ($LASTEXITCODE -ne 0) { & $git commit -q -m "Weekly update $stamp"; & $git push -q origin main; Log "github: backup pushed" } else { Log "github: nothing new to back up" }
+  Pop-Location
+} catch { Log "github: backup failed $_" }
 Log "=== done ==="
