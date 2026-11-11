@@ -394,6 +394,25 @@ body:has(.player.show) .tv-dock.mini { bottom: 86px; }
 .padel-banner .go svg { width: 14px; height: 14px; }
 .padel-banner:hover .go { background: #e5141e; border-color: #e5141e; color: #fff; }
 
+/* ---------- journal: essentials + search ---------- */
+.news-search { position: relative; max-width: 640px; margin: 18px 0 6px; }
+.news-search input { width: 100%; padding: 13px 16px 13px 44px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--card); font-size: 15.5px; outline: none; }
+.news-search input:focus { border-color: var(--accent); }
+.news-search svg { position: absolute; left: 15px; top: 50%; translate: 0 -50%; width: 18px; color: var(--muted); }
+.journal-cols { display: grid; grid-template-columns: minmax(280px, 340px) minmax(0, 1fr); gap: 28px; align-items: start; margin-top: 14px; }
+.essentials { position: sticky; top: 84px; max-height: calc(100vh - 100px); overflow-y: auto; border-top: 2px solid var(--accent); padding-top: 12px; }
+.ess-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.ess-head .kicker { color: var(--accent); }
+.ess-time { font: 500 11px var(--mono); color: var(--faint); }
+a.ess { display: grid !important; grid-template-columns: auto 1fr; gap: 12px; border: 0 !important; border-bottom: 1px solid var(--line) !important; border-radius: 0 !important;
+  background: transparent !important; padding: 14px 0; transform: none !important; }
+.ess-n { font: 400 26px/1 var(--serif); color: var(--faint); }
+a.ess h3 { font: 600 15px/1.35 var(--sans) !important; margin: 0 0 5px; }
+a.ess p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ess-meta { margin-top: 6px; font: 500 10.5px var(--mono); letter-spacing: .03em; color: var(--faint); }
+.journal-cols .lead-story { grid-template-columns: 1.2fr 1fr; }
+@media (max-width: 1100px) { .journal-cols { grid-template-columns: 1fr; } .essentials { position: static; max-height: none; } }
+
 /* ---------- in-app reader ---------- */
 .reader { position: fixed; top: 0; right: 0; bottom: 0; left: var(--sidebar); z-index: 50; background: var(--bg); overflow-y: auto; transform: translateX(100%); transition: transform .45s var(--ease); }
 .reader.open { transform: none; }
@@ -511,3 +530,6 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
   .apps { left: 0; bottom: 64px; }
   h2 { font-size: 26px; }
 }
+
+.journal-cols .lead-story h3 { font-size: clamp(26px, 2.4vw, 34px); }
+.journal-cols .lead-story .art-img { min-height: 280px; }

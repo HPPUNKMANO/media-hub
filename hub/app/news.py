@@ -117,6 +117,44 @@ async def read(url: str):
             "blocks": blocks[:120], "url": url, "short": paywall}
 
 
+STOP = set("""le la les un une des du de d l au aux et ou en à a dans sur pour par avec sans sous ce cette ces son sa ses leur leurs
+qui que quoi dont est sont été être fait faire plus moins pas ne n se s il elle ils elles on nous vous je tu y après avant comme
+entre contre vers chez selon depuis lors face nouveau nouvelle nouveaux deux trois va vont peut doit the of to in and for on with
+video vidéo direct live photos info infos ce qu quand comment pourquoi tout tous toute toutes alors encore aussi déjà très bien""".split())
+
+
+def _words(t: str) -> set[str]:
+    import unicodedata
+    t = unicodedata.normalize("NFKD", t.lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return {w for w in re.findall(r"[a-z0-9]{4,}", t) if w not in STOP}
+
+
+def essentials(items: list[dict], n: int = 8) -> list[dict]:
+    """'L'essentiel': groups headlines that several newspapers cover (the more papers, the bigger the story)."""
+    recent = [i for i in items if i["ts"] and time.time() - i["ts"] < 36 * 3600][:250]
+    groups: list[dict] = []
+    for it in recent:
+        w = _words(it["title"])
+        for g in groups:
+            if len(w & g["words"]) >= 2:   # compare with the story's first headline only (no drift between topics)
+                g["items"].append(it); break
+        else:
+            groups.append({"words": set(w), "items": [it]})
+    out = []
+    for g in groups:
+        srcs = {i["source_name"] for i in g["items"]}
+        if len(srcs) < 2:
+            continue
+        best = g["items"][0] if len(g["items"][0]["summary"]) > 60 else max(
+            (i for i in g["items"] if len(_words(i["title"]) & g["words"]) >= 2), key=lambda i: (len(i["summary"]), bool(i["image"])))
+        out.append({"title": best["title"], "summary": best["summary"][:260], "link": best["link"], "image": best["image"],
+                    "sources": sorted(srcs), "count": len(srcs), "ts": max(i["ts"] for i in g["items"]),
+                    "section": best["section"], "source_name": best["source_name"]})
+    out.sort(key=lambda s: (s["count"], s["ts"]), reverse=True)
+    return out[:n]
+
+
 @router.get("/api/news")
 async def news():
     if time.time() - _cache["t"] > 300 or not _cache["items"]:
@@ -124,4 +162,5 @@ async def news():
         items = sorted((i for l in lists for i in l), key=lambda i: i["ts"], reverse=True)
         _cache.update(t=time.time(), items=items)
         remember(items)
-    return {"sources": [{"key": k, "name": n, "section": s} for k, n, s, _ in SOURCES], "items": _cache["items"]}
+    return {"sources": [{"key": k, "name": n, "section": s} for k, n, s, _ in SOURCES], "items": _cache["items"],
+            "essentials": essentials(_cache["items"])}

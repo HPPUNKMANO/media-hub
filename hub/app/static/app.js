@@ -509,10 +509,21 @@ const pages = {
   },
 
   async journal() {
-    view.innerHTML = `<h1>Le <em>Journal</em></h1><p class="lead">Today's headlines from French newspapers, refreshed every 10 minutes.</p>
-      <div class="filters" id="nw-chips"></div><div id="nw"><div class="skeleton"></div></div>`;
+    view.innerHTML = `<h1>Le <em>Journal</em></h1><p class="lead">L'essentiel de l'actu à gauche, tous les articles à droite — mis à jour en continu.</p>
+      <form class="news-search" id="nw-search" role="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="nw-q" type="search" placeholder="Rechercher dans les infos : un nom, un pays, un sujet…" autocomplete="off"></form>
+      <div class="journal-cols"><aside class="essentials" id="nw-ess"></aside>
+        <div><div class="filters" id="nw-chips"></div><div id="nw"><div class="skeleton"></div></div></div></div>`;
     const d = await api("/api/news");
-    let src = store.get("hub-news-src", "all");
+    let src = store.get("hub-news-src", "all"), q = "";
+    const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    const agoE = (ts) => { if (!ts) return ""; const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 60 ? `il y a ${Math.max(m, 1)} min` : `il y a ${Math.round(m / 60)} h`; };
+    $("#nw-ess").innerHTML = `<div class="ess-head"><span class="kicker">L'essentiel</span><span class="ess-time">${new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span></div>` +
+      ((d.essentials || []).map((s, i) => `<a class="ess art-card" href="${esc(s.link)}">
+        <span class="ess-n">${String(i + 1).padStart(2, "0")}</span>
+        <div><h3>${esc(s.title)}</h3>${s.summary ? `<p>${esc(s.summary)}</p>` : ""}
+        <div class="ess-meta">${s.count} journaux · ${esc(s.sources.slice(0, 3).join(", "))}${s.sources.length > 3 ? "…" : ""} · ${agoE(s.ts)}</div></div></a>`).join("")
+        || `<p class="lead small">Pas encore assez d'articles pour un récap.</p>`);
     const ago = (ts) => { if (!ts) return ""; const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 60 ? `${Math.max(m, 1)} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; };
     const card = (a, big) => `<a class="art-card${big ? " lead-story" : ""}${a.image ? "" : " noimg"}" href="${esc(a.link)}" target="_blank" rel="noopener">
         ${a.image ? `<div class="art-img"><img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></div>` : ""}
@@ -523,6 +534,13 @@ const pages = {
       $("#nw-chips").innerHTML = [`<button class="chip${src === "all" ? " on" : ""}" data-s="all">À la une</button>`,
         ...d.sources.filter((s) => d.items.some((i) => i.source === s.key)).map((s) => `<button class="chip${src === s.key ? " on" : ""}" data-s="${s.key}">${esc(s.name)}</button>`)].join("");
       let items = src === "all" ? d.items : d.items.filter((i) => i.source === src);
+      if (q) {   // search: every word must appear in the title or summary (accents ignored)
+        const words = norm(q).split(/\s+/).filter(Boolean);
+        items = items.filter((i) => { const t = norm(`${i.title} ${i.summary} ${i.source_name}`); return words.every((w) => t.includes(w)); });
+        $("#nw").innerHTML = items.length ? `<p class="lead small">${items.length} article${items.length > 1 ? "s" : ""} pour « ${esc(q)} »</p><div class="news-grid">${items.slice(0, 80).map((a) => card(a, false)).join("")}</div>`
+          : `<div class="empty">Aucun article sur « ${esc(q)} » en ce moment.</div>`;
+        return;
+      }
       if (src === "all") {   // front page: no more than 4 stories per paper, so one source doesn't flood it
         const per = {}; items = items.filter((i) => (per[i.source] = (per[i.source] || 0) + 1) <= 4);
       }
@@ -534,6 +552,8 @@ const pages = {
         `${lead ? card(lead, true) : ""}<div class="news-grid">${others.slice(0, 60).map((a) => card(a, false)).join("")}</div>`;
     };
     $("#nw-chips").onclick = (e) => { const b = e.target.closest(".chip"); if (b) { src = b.dataset.s; draw(); } };
+    let t; $("#nw-q").oninput = (e) => { clearTimeout(t); t = setTimeout(() => { q = e.target.value.trim(); draw(); }, 200); };
+    $("#nw-search").onsubmit = (e) => e.preventDefault();
     draw();
   },
 
@@ -834,6 +854,7 @@ setInterval(() => {
   const page = location.hash.slice(1).split("?")[0] || "home";
   const every = LIVE_PAGES[page];
   if (!every || document.hidden || window.scrollY > 300 || Date.now() - lastRender < every * 60000) return;
+  if (document.body.classList.contains("reading") || document.activeElement?.tagName === "INPUT" || $("#nw-q")?.value) return;   // never interrupt reading or a search
   lastRender = Date.now();
   pages[page]?.();
 }, 60000);
