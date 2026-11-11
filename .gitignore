@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.playwright-mcp/
+
+# never publish secrets / local data
+*.db
+*.log
+*.m3u

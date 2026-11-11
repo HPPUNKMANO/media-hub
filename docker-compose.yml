@@ -1,0 +1,126 @@
+# Personal Media Hub: run with `docker compose up -d --build` from this folder.
+# Paths and secrets come from .env (copy .env.example to .env first).
+name: media-hub
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  # ---------------------------------------------------------------- video
+  jellyfin:
+    <<: *common
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    ports:
+      - "8096:8096"
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+      JELLYFIN_PublishedServerUrl: ${PUBLISHED_URL_JELLYFIN:-}
+    volumes:
+      - ${SERVER_DIR}/jellyfin/config:/config
+      - ${SERVER_DIR}/jellyfin/cache:/cache
+      # Read-only: Jellyfin can never modify or delete your media.
+      - ${MEDIA_DIR}:/media:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8096/health"]
+      interval: 60s
+      timeout: 5s
+
+  # ---------------------------------------------------------------- music
+  navidrome:
+    <<: *common
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    # no published port: the "gate" service below publishes 4533 for it
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+      ND_SCANSCHEDULE: "1h"
+      ND_LOGLEVEL: info
+      ND_ENABLEINSIGHTSCOLLECTOR: "false"
+      ND_LISTENBRAINZ_ENABLED: "true"
+      ND_LASTFM_ENABLED: ${ND_LASTFM_ENABLED:-false}
+      ND_DEFAULTLANGUAGE: en
+    volumes:
+      - ${SERVER_DIR}/navidrome:/data
+      - ${MEDIA_DIR}/Music:/music:ro
+
+  # ------------------------------------------------------ podcasts & books
+  audiobookshelf:
+    <<: *common
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    container_name: audiobookshelf
+    # no published port: the "gate" service below publishes 13378 for it
+    volumes:
+      - ${MEDIA_DIR}/Podcasts:/podcasts
+      - ${MEDIA_DIR}/Audiobooks:/audiobooks
+      - ${SERVER_DIR}/audiobookshelf/config:/config
+      - ${SERVER_DIR}/audiobookshelf/metadata:/metadata
+
+  # ----------------------------------------------------------------- gate
+  # Lets the Hub show Navidrome and Audiobookshelf inside its own window (removes their anti-embedding headers).
+  gate:
+    <<: *common
+    image: nginx:1.27-alpine
+    container_name: gate
+    ports:
+      - "4533:4533"
+      - "13378:13378"
+    volumes:
+      - ./gate/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - navidrome
+      - audiobookshelf
+
+  # ------------------------------------------------------------ organizer
+  organizer:
+    <<: *common
+    build: ./organizer
+    container_name: organizer
+    # No published port: only the Hub can talk to it.
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+      ORGANIZER_MODE: ${ORGANIZER_MODE:-dry-run}
+      ORGANIZER_INTERVAL_MINUTES: ${ORGANIZER_INTERVAL_MINUTES:-10}
+      ORGANIZER_STABLE_SECONDS: ${ORGANIZER_STABLE_SECONDS:-120}
+      ORGANIZER_FETCH_COVER_ART: ${ORGANIZER_FETCH_COVER_ART:-true}
+      METADATA_LANGUAGE: ${METADATA_LANGUAGE:-en-US}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      JELLYFIN_URL: http://jellyfin:8096
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
+      NAVIDROME_URL: http://navidrome:4533
+      NAVIDROME_USER: ${NAVIDROME_USER:-}
+      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD:-}
+      ABS_URL: http://audiobookshelf:80
+      ABS_API_TOKEN: ${ABS_API_TOKEN:-}
+    volumes:
+      # One single mount, so every move is an instant rename (never copy + delete).
+      - ${MEDIA_DIR}:/media
+      - ${SERVER_DIR}/organizer:/state
+
+  # ------------------------------------------------------------------ hub
+  hub:
+    <<: *common
+    build: ./hub
+    container_name: hub
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: ${TZ:-Europe/Paris}
+      JELLYFIN_URL: http://jellyfin:8096
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
+      JELLYFIN_USER: ${JELLYFIN_USER:-}
+      NAVIDROME_URL: http://navidrome:4533
+      NAVIDROME_USER: ${NAVIDROME_USER:-}
+      NAVIDROME_PASSWORD: ${NAVIDROME_PASSWORD:-}
+      ABS_URL: http://audiobookshelf:80
+      ABS_API_TOKEN: ${ABS_API_TOKEN:-}
+      ORGANIZER_URL: http://organizer:8000
+      # address phones use to reach the hub on your Wi-Fi (shown as a QR code on the "Install app" page)
+      HUB_LAN_URL: ${HUB_LAN_URL:-}
+    volumes:
+      - ${SERVER_DIR}/hub:/data
+    depends_on:
+      - organizer

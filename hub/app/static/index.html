@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b0b0c">
+  <title>Media Hub</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+  <link rel="icon" type="image/png" href="/static/icons/favicon-64.png"><rect width='32' height='32' rx='9' fill='%237c9cff'/><path d='M12 9l11 7-11 7z' fill='white'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="/static/styles.css?v=17">
+  <script>
+    document.documentElement.dataset.theme = "dark";
+    try { const t = localStorage.getItem("hub-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <canvas id="bg3d" aria-hidden="true"></canvas>
+  <aside class="sidebar">
+    <div class="brand">Media <i>Hub</i><div class="brand-mark">.</div></div>
+    <nav class="nav" id="nav">
+      <div class="nav-label">Browse</div>
+      <a href="#home" data-page="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></a>
+      <a href="#watch" data-page="watch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></svg><span>Watch</span></a>
+      <a href="#tv" data-page="tv" class="tv-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M7 2l5 5 5-5"/></svg><span>Live TV</span></a>
+      <a href="#padel" data-page="padel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="10" cy="9" rx="6" ry="7"/><path d="M14 14l6 7"/><circle cx="19" cy="5" r="2"/></svg><span>Padel</span></a>
+      <a href="#listen" data-page="listen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><span>Listen</span></a>
+      <a href="#journal" data-page="journal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h13v16H6a2 2 0 0 1-2-2z"/><path d="M17 8h3v10a2 2 0 0 1-2 2"/><path d="M8 8h5M8 12h5M8 16h3"/></svg><span>Journal</span></a>
+      <a href="#videos" data-page="videos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="4"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg><span>Videos</span></a>
+      <a href="#ai" data-page="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg><span>AI briefing</span></a>
+      <div class="nav-label">Streaming</div>
+      <a href="#spotify" data-page="spotify" class="spotify-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M7 9.5c3.5-1 7.5-.6 10.5 1.2M7.6 12.8c2.8-.8 6-.4 8.4 1M8.3 15.9c2.2-.6 4.5-.3 6.3.8"/></svg><span>Spotify</span></a>
+      <a href="https://www.netflix.com/browse" target="_blank" rel="noopener" class="netflix-link"><svg viewBox="0 0 24 24"><path d="M6 3h3.2l5.6 13.5V3H18v18h-3.2L9.2 7.5V21H6z" fill="currentColor"/></svg><span>Netflix</span></a>
+      <div class="nav-label">More</div>
+      <a href="#discover" data-page="discover"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M16 8l-2 6-6 2 2-6z"/></svg><span>Discover</span></a>
+      <a href="#learn" data-page="learn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 8l10-5 10 5-10 5z"/><path d="M6 10v5c3 3 9 3 12 0v-5"/></svg><span>Learn</span></a>
+      <a href="#organizer" data-page="organizer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h6l2 2h10v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Organize</span></a>
+      <a href="#phone" data-page="phone" class="hide-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg><span>Install app</span></a>
+      <a href="#status" data-page="status" class="hide-sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span>Status</span></a>
+    </nav>
+    <div class="spacer"></div>
+    <nav class="nav services" id="service-links"></nav>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <form class="search" id="search-form" role="search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="q" type="search" placeholder="Search movies, shows, music, free sites…" autocomplete="off" aria-label="Search">
+      </form>
+      <button class="icon-btn" id="theme" title="Toggle light/dark" aria-label="Toggle theme">◐</button>
+    </div>
+    <div id="view"></div>
+  </main>
+
+  <section class="apps" id="apps" aria-label="Apps">
+    <nav class="apps-tabs" id="apps-tabs"></nav>
+    <div class="apps-frames" id="apps-frames"></div>
+  </section>
+  <div class="sp-dock" id="sp-dock" hidden></div>
+  <div class="tv-dock" id="tv-dock" hidden></div>
+  <div class="player" id="player" role="region" aria-label="Radio player">
+    <div class="now-art" id="now-art"><i></i><i></i><i></i><i></i></div>
+    <button class="icon-btn play" id="pp" aria-label="Play/pause">❚❚</button>
+    <div class="now"><b id="now-name"></b><span id="now-sub">Live radio</span></div>
+    <input type="range" id="vol" min="0" max="1" step="0.05" value="0.8" aria-label="Volume">
+    <button class="icon-btn" id="stop" aria-label="Stop">✕</button>
+    <audio id="audio" preload="none"></audio>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.13/dist/hls.min.js"></script>
+  <script src="/static/app.js?v=18"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+  <script src="/static/bg3d.js?v=9" defer></script>
+</body>
+</html>
