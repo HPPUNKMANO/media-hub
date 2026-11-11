@@ -597,3 +597,5 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
   .apps-nav span { display: none; }
   .apps { z-index: 50; }
 }
+
+.player .now .np { color: var(--text); font: 500 12.5px var(--sans); letter-spacing: 0; text-transform: none; }

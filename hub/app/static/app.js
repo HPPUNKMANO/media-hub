@@ -189,6 +189,7 @@ function playRadio(name, url, genre) {
   audio.volume = Number($("#vol").value);
   audio.play().catch(() => { $("#now-sub").textContent = "Could not start the stream"; });
   $("#now-name").textContent = name; $("#now-sub").textContent = `Live · ${genre || "radio"}`;
+  nowGenre = genre; pollNow();
   player.classList.add("show");
   markPlaying();
 }
@@ -210,6 +211,19 @@ audio.addEventListener("play", () => {
   // the radio and Spotify share the speakers: pausing the radio is enough, Spotify has its own button
   const n = $("#now-name").textContent; $("#now-art").style.setProperty("--h", hue(n));
 });
+
+/* ---- song title on the radio player ("now playing"), for stations that publish it in their stream */
+let nowGenre = "", nowTimer = null;
+async function pollNow() {
+  clearTimeout(nowTimer);
+  if (!playingUrl || audio.paused) return;
+  const url = playingUrl;
+  const n = await api(`/api/radio/now?url=${encodeURIComponent(url)}`);
+  if (url !== playingUrl) return;
+  $("#now-sub").innerHTML = n.title ? `<span class="np">♪ ${esc(n.artist ? `${n.artist} — ${n.title}` : n.title)}</span>` : `Live · ${esc(nowGenre || "radio")}`;
+  nowTimer = setTimeout(pollNow, 20000);
+}
+audio.addEventListener("play", () => pollNow());
 
 /* ------------------------------------------------------------ live TV (persistent player, like the Spotify dock) */
 const tvDock = $("#tv-dock");

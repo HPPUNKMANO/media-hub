@@ -26,8 +26,9 @@ PORTS = {
 
 app = FastAPI(title="Media Hub", docs_url=None, redoc_url=None)
 
-from . import news, padel, tv, youtube  # noqa: E402  (live TV relay, headlines, videos + AI news, padel lives)
+from . import news, padel, radio, tv, youtube  # noqa: E402  (live TV relay, headlines, videos + AI news, padel lives)
 app.include_router(padel.router)
+app.include_router(radio.router)
 app.include_router(tv.router)
 app.include_router(news.router)
 app.include_router(youtube.router)
