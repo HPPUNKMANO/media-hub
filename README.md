@@ -41,7 +41,7 @@ In Docker Desktop → *Settings → General*, tick **Start Docker Desktop when y
 Optionally, in *Settings → Resources → WSL*, give it 4–6 GB RAM (your laptop has 16 GB).
 
 ### Step 2: Run the setup script
-Open **PowerShell as Administrator** in this folder (`C:\Users\HPPER\OneDrive\Bureau\media studio`):
+Open **PowerShell as Administrator** in this folder (the folder that contains `docker-compose.yml`):
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
