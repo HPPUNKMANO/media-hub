@@ -267,6 +267,28 @@ document.addEventListener("click", (e) => {
   e.preventDefault(); playYT(v.dataset.yt, v.dataset.title);
   $(".media-stage")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
 });
+/* ---- in-app reader: articles open inside the app, never in another site */
+document.addEventListener("click", async (e) => {
+  const a = e.target.closest("a.art-card"); if (!a) return;
+  e.preventDefault();
+  let rd = $("#reader");
+  if (!rd) { rd = document.createElement("div"); rd.id = "reader"; rd.className = "reader"; document.body.appendChild(rd); }
+  rd.innerHTML = `<div class="reader-bar"><button class="btn ghost" id="rd-back">← Back</button></div><article class="reader-page"><div class="skeleton"></div></article>`;
+  rd.classList.add("open"); document.body.classList.add("reading"); rd.scrollTop = 0;
+  const close = () => { rd.classList.remove("open"); document.body.classList.remove("reading"); };
+  $("#rd-back").onclick = close;
+  const r = await api(`/api/read?url=${encodeURIComponent(a.href)}`);
+  const meta = a.querySelector(".art-meta")?.innerHTML || "";
+  const title = r.title || a.querySelector("h3")?.textContent || "";
+  const summary = a.querySelector("p")?.textContent || "";
+  rd.querySelector(".reader-page").innerHTML = `<div class="art-meta">${meta}</div><h1>${esc(title)}</h1>
+    ${r.image ? `<img class="reader-img" src="${esc(r.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ""}
+    ${r.error || r.detail ? `<p class="lead">${esc(summary)}</p><div class="empty">This newspaper doesn't let its articles be read outside its site.</div>` :
+      (r.blocks || []).map((b) => b.t === "p" ? `<p>${esc(b.x)}</p>` : b.t === "li" ? `<p class="li">• ${esc(b.x)}</p>` : b.t === "blockquote" ? `<blockquote>${esc(b.x)}</blockquote>` : `<h3>${esc(b.x)}</h3>`).join("")}
+    ${r.short ? `<div class="empty">This article is reserved for the newspaper's subscribers — only the beginning is available.</div>` : ""}`;
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#rd-back")?.click(); });
+
 const timeAgo = (iso) => { const s = (Date.now() - new Date(iso)) / 1000; return s < 3600 ? `${Math.max(1, Math.round(s / 60))} min` : s < 86400 ? `${Math.round(s / 3600)} h` : s < 2592000 ? `${Math.round(s / 86400)} d` : `${Math.round(s / 2592000)} mo`; };
 const fmtViews = (n) => !n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M views` : n >= 1e3 ? `${Math.round(n / 1e3)}k views` : `${n} views`;
 const videoCard = (v) => `<a class="vid${tvNow && tvNow.yt === v.id ? " on" : ""}" href="https://www.youtube.com/watch?v=${esc(v.id)}" data-yt="${esc(v.id)}" data-title="${esc(v.title)}">
@@ -418,16 +440,30 @@ const pages = {
     syncTvDock();
     let chans = (await api("/api/yt/channels")).channels || [];
     let cur = store.get("hub-yt-ch", ""), cat = store.get("hub-yt-cat", "");
-    const cats = () => [...new Set(chans.map((c) => c.cat || "My channels"))];
+    let extra = store.get("hub-yt-extra-cats", []);   // filters created by the user that have no channel yet
+    const cats = () => [...new Set([...chans.map((c) => c.cat || "My channels"), ...extra])];
     const draw = async () => {
       store.set("hub-yt-ch", cur); store.set("hub-yt-cat", cat);
-      $("#yt-chips").innerHTML = cats().map((k) => `<button class="chip${cat === k && !cur ? " on" : ""}" data-k="${esc(k)}">${esc(k)}</button>`).join("") + `<span style="width:100%"></span>` + chans.filter((c) => !cat || (c.cat || "My channels") === cat).map((c) =>
+      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">Latest</button>` +
+        cats().map((k) => `<button class="chip${cat === k && !cur ? " on" : ""}" data-k="${esc(k)}">${esc(k)}</button>`).join("") +
+        `<button class="chip add-chip" id="yt-newcat">+ New filter</button><span style="width:100%"></span>` +
+        chans.filter((c) => cat && (c.cat || "My channels") === cat).map((c) =>
         `<span class="chip ch-chip${cur === c.id ? " on" : ""}" data-c="${esc(c.id)}">${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : ""}${esc(c.title)}<button class="x" data-rm="${esc(c.id)}" title="Unfollow">✕</button></span>`).join("");
       $("#yt-grid").innerHTML = `<div class="skeleton"></div>`;
+      $("#yt-add input").placeholder = cat ? `Add a channel to “${cat}”: paste its link or @name` : "Add a channel: paste its link or @name (pick a filter first to file it there)";
       const f = await api(`/api/yt/feed?${cur ? `ch=${encodeURIComponent(cur)}` : `cat=${encodeURIComponent(cat)}`}`);
-      $("#yt-grid").innerHTML = (f.videos || []).map(videoCard).join("") || `<div class="empty">No videos yet.</div>`;
+      $("#yt-grid").innerHTML = (f.videos || []).map(videoCard).join("") ||
+        `<div class="empty">${cat && !chans.some((c) => c.cat === cat) ? `“${esc(cat)}” is empty — add a channel to it with the box above.` : "No videos yet."}</div>`;
     };
     $("#yt-chips").onclick = async (e) => {
+      if (e.target.closest("#yt-newcat")) {
+        const chip = e.target.closest("#yt-newcat");
+        chip.outerHTML = `<form class="chip add-chip" id="yt-newcat-form"><input placeholder="Filter name" maxlength="40" autofocus></form>`;
+        const form = $("#yt-newcat-form"), inp = form.querySelector("input"); inp.focus();
+        form.onsubmit = (ev) => { ev.preventDefault(); const n = inp.value.trim(); if (n) { extra = [...new Set([...extra, n])]; store.set("hub-yt-extra-cats", extra); cat = n; cur = ""; } draw(); };
+        inp.onblur = () => form.requestSubmit();
+        return;
+      }
       const rm = e.target.closest("[data-rm]");
       if (rm) { e.stopPropagation(); await api(`/api/yt/channels/${rm.dataset.rm}`, { method: "DELETE" }); chans = chans.filter((c) => c.id !== rm.dataset.rm); if (cur === rm.dataset.rm) cur = ""; return draw(); }
       const k = e.target.closest("[data-k]"); if (k) { cat = k.dataset.k; cur = ""; return draw(); }
@@ -439,15 +475,25 @@ const pages = {
       if (r.detail || r.error) { $("#yt-err").textContent = r.detail || r.error; return; }
       $("#yt-err").textContent = ""; inp.value = ""; if (!chans.some((c) => c.id === r.id)) chans.unshift(r); cur = r.id; draw();
     };
-    if (!cat) cat = cats()[0] || "";
+    if (cat && !cats().includes(cat)) cat = "";
     draw();
   },
 
   async ai() {
-    view.innerHTML = `<h1>AI <em>briefing</em></h1><p class="lead">Your personal AI news: research labs, tech press and the best AI channels, updated continuously.</p>
-      <div class="tv-stage media-stage"><div class="tv-hint">Pick a video below</div></div><div id="ai"><div class="skeleton"></div></div>`;
-    syncTvDock();
+    view.innerHTML = `<h1>Récap <em>IA</em></h1><p class="lead">Ton récap personnel de l'IA, écrit pour toi par Claude : les nouveautés, comment ça marche, avec quoi, et ce que les gens en font.</p>
+      <div id="ai"><div class="skeleton"></div></div>`;
     const d = await api("/api/ai");
+    const rc = d.recap || {};
+    if (rc.sections) {
+      $("#ai").innerHTML = `<article class="recap">
+        <div class="recap-head"><span class="kicker">Semaine du ${esc(rc.date || "")}</span><h2 class="recap-title">${esc(rc.title || "")}</h2><p class="recap-intro">${esc(rc.intro || "")}</p></div>
+        ${rc.sections.map((s) => `<section class="recap-sec"><h2>${esc(s.title)}</h2><div class="recap-items">${(s.items || []).map((i) => `
+          <div class="recap-item"><h3>${esc(i.title)}</h3><p>${esc(i.text)}</p>${i.source ? `<span class="recap-src">${esc(i.source)}</span>` : ""}</div>`).join("")}</div></section>`).join("")}
+        ${rc.sources?.length ? `<details class="recap-sources"><summary>Sources (${rc.sources.length})</summary><ul>${rc.sources.map((s) => `<li>${esc(s.name)}</li>`).join("")}</ul></details>` : ""}
+      </article>`;
+      return;
+    }
+    // no recap written yet: fall back to the filtered AI headlines (they open in the in-app reader)
     const ago = (ts) => { if (!ts) return ""; const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 60 ? `${Math.max(m, 1)} min` : m < 1440 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`; };
     const card = (a, big) => `<a class="art-card${big ? " lead-story" : ""}${a.image ? "" : " noimg"}" href="${esc(a.link)}" target="_blank" rel="noopener">
         ${a.image ? `<div class="art-img"><img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.remove()"></div>` : ""}
@@ -457,8 +503,7 @@ const pages = {
     const lead = arts.find((a) => a.image);
     const labs = arts.filter((a) => a.section === "Lab" || a.section === "Open source");
     const press = arts.filter((a) => a !== lead && !labs.includes(a));
-    $("#ai").innerHTML = (lead ? card(lead, true) : "") +
-      `<h2>Watch <small>${(d.channels || []).map((c) => esc(c.title)).join(" · ")}</small></h2><div class="vid-row">${(d.videos || []).map(videoCard).join("")}</div>` +
+    $("#ai").innerHTML = `<div class="empty">Ton premier récap est en cours de rédaction — en attendant, voici les titres IA du moment.</div>` + (lead ? card(lead, true) : "") +
       `<h2>From the labs <small>OpenAI · DeepMind · Hugging Face</small></h2><div class="news-grid">${labs.slice(0, 9).map((a) => card(a)).join("")}</div>` +
       `<h2>In the press</h2><div class="news-grid">${press.slice(0, 30).map((a) => card(a)).join("")}</div>`;
   },

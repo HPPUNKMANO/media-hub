@@ -75,10 +75,53 @@ async def _fetch(key, name, section, url) -> list[dict]:
     return out[:25]
 
 
+KNOWN_HOSTS: set[str] = set()   # filled from the feeds: the reader only opens articles we listed (no open proxy)
+P_TAG = re.compile(r"<(p|h2|h3|li|blockquote)\b[^>]*>(.*?)</\1>", re.I | re.S)
+
+
+def remember(items: list[dict]) -> None:
+    from urllib.parse import urlparse
+    for i in items:
+        KNOWN_HOSTS.add(urlparse(i["link"]).hostname or "")
+
+
+@router.get("/api/read")
+async def read(url: str):
+    """In-app reader: fetches an article from a known feed and returns its clean text."""
+    from urllib.parse import urlparse
+    from fastapi import HTTPException
+    host = urlparse(url).hostname or ""
+    if not url.startswith(("http://", "https://")) or host not in KNOWN_HOSTS:
+        raise HTTPException(403, "Only articles listed in the hub can be opened here.")
+    try:
+        r = await http.get(url)
+        r.raise_for_status()
+    except httpx.HTTPError:
+        raise HTTPException(502, "The newspaper's site did not answer.")
+    page = r.text
+    body = re.search(r"<article\b.*?</article>", page, re.S | re.I)
+    scope = body.group(0) if body and len(body.group(0)) > 2000 else page
+    scope = re.sub(r"<(script|style|nav|aside|footer|form|figure)\b.*?</\1>", " ", scope, flags=re.S | re.I)
+    blocks = []
+    for tag, inner in P_TAG.findall(scope):
+        t = _text(inner)
+        if len(t) < 40 and tag.lower() == "p":
+            continue
+        if re.search(r"(cookies?|abonnez-vous|newsletter|Lire aussi|À lire aussi|subscribe|sign up|Tous droits)", t, re.I) and len(t) < 200:
+            continue
+        blocks.append({"t": tag.lower(), "x": t})
+    title = re.search(r'<meta property="og:title" content="([^"]+)"', page)
+    image = re.search(r'<meta property="og:image" content="([^"]+)"', page)
+    paywall = len(" ".join(b["x"] for b in blocks)) < 600
+    return {"title": html.unescape(title.group(1)) if title else "", "image": image.group(1) if image else "",
+            "blocks": blocks[:120], "url": url, "short": paywall}
+
+
 @router.get("/api/news")
 async def news():
     if time.time() - _cache["t"] > 300 or not _cache["items"]:
         lists = await asyncio.gather(*(_fetch(*s) for s in SOURCES))
         items = sorted((i for l in lists for i in l), key=lambda i: i["ts"], reverse=True)
         _cache.update(t=time.time(), items=items)
+        remember(items)
     return {"sources": [{"key": k, "name": n, "section": s} for k, n, s, _ in SOURCES], "items": _cache["items"]}

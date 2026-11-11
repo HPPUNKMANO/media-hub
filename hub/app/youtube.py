@@ -166,6 +166,14 @@ async def ai_news():
     if any(s[0] == "numerama" for s in AI_SOURCES):   # Numerama is general tech: keep only AI stories
         kw = re.compile(r"\b(IA|AI|intelligence artificielle|ChatGPT|OpenAI|Claude|Anthropic|Gemini|Mistral|LLM|robot)\b", re.I)
         articles = [a for a in articles if a["source"] != "numerama" or kw.search(a["title"] + " " + a["summary"])]
+    news.remember(articles)
     videos = sorted((v for l in vids for v in l if not v["short"]), key=lambda v: v["published"], reverse=True)
-    return {"articles": articles[:80], "videos": videos[:24], "channels": chans,
+    recap = {}
+    try:
+        from .main import DATA_DIR
+        f = DATA_DIR / "ai_recap.json"
+        recap = json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    except (OSError, ValueError):
+        recap = {}
+    return {"recap": recap, "articles": articles[:80], "videos": videos[:24], "channels": chans,
             "sources": [{"key": k, "name": n} for k, n, _, _ in AI_SOURCES]}

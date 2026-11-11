@@ -56,6 +56,9 @@ if (Test-Path $claude) {
   Log "claude: done (exit $LASTEXITCODE)"
 } else { Log "claude: CLI not found, research skipped" }
 
+# AI recap (written by Claude for the hub's AI page)
+& powershell -ExecutionPolicy Bypass -File "$root\scripts\ai_recap\run.ps1" | ForEach-Object { Log $_ }
+
 # ---------------------------------------------------------------- 4. downloads (validated items only)
 $cand = Join-Path $work "candidates.json"
 if (Test-Path $cand) {
