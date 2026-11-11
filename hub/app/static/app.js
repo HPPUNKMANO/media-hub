@@ -914,6 +914,13 @@ async function checkPadel() {
 }
 checkPadel(); setInterval(checkPadel, 300000);
 
+/* ---- phone menu: ☰ button top-left opens the full menu as a side panel */
+const setNav = (open) => { document.body.classList.toggle("nav-open", open); $("#menu-btn")?.setAttribute("aria-expanded", open); };
+$("#menu-btn")?.addEventListener("click", () => setNav(!document.body.classList.contains("nav-open")));
+$("#nav-backdrop")?.addEventListener("click", () => setNav(false));
+document.querySelector(".sidebar")?.addEventListener("click", (e) => { if (e.target.closest("a")) setNav(false); });
+window.addEventListener("hashchange", () => setNav(false));
+
 /* ---- installable app (PWA) */
 let installPrompt = null, CONFIG = {};
 const isStandalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone;

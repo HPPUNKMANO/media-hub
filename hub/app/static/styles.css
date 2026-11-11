@@ -548,3 +548,27 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
 .hero .btn.art-card, .hero .btn.vid { border-radius: 8px; padding: 12px 20px; transform: none; }
 .hero h1.long { font-size: clamp(34px, 3.6vw, 54px); line-height: 1.05; }
 .hero-bg { background-position: center; }
+
+/* ================= phone: ☰ menu instead of the bottom bar ================= */
+.menu-btn, .nav-backdrop { display: none; }
+@media (max-width: 860px) {
+  .menu-btn { display: grid; flex: none; }
+  .sidebar { inset: 0 auto 0 0 !important; width: min(300px, 84vw) !important; height: auto !important; flex-direction: column !important;
+    padding: max(18px, env(safe-area-inset-top)) 14px 18px !important; border-top: 0 !important; border-right: 1px solid var(--line) !important;
+    justify-content: flex-start !important; background: var(--bg) !important; overflow-y: auto; transform: translateX(-105%); transition: transform .35s var(--ease); z-index: 60; }
+  body.nav-open .sidebar { transform: none; box-shadow: 30px 0 60px rgba(0,0,0,.6); }
+  .nav { display: flex !important; }
+  .brand, .nav-label, .sidebar .nav.services, .nav a.hide-sm, .nav a.netflix-link, .nav a[data-page="learn"], .nav a[data-page="organizer"] { display: flex !important; }
+  .nav-label { display: block !important; }
+  .sidebar .spacer { display: block !important; min-height: 16px; }
+  .nav a { flex-direction: row !important; gap: 12px !important; font-size: 15px !important; padding: 11px 12px !important; flex: none !important; text-align: left !important; }
+  .nav a.active::before { left: -14px !important; right: auto !important; top: 10px !important; bottom: 10px !important; width: 2px !important; height: auto !important; }
+  .nav-backdrop { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.55); opacity: 0; pointer-events: none; transition: opacity .3s; }
+  body.nav-open .nav-backdrop { opacity: 1; pointer-events: auto; }
+  main { padding-bottom: 110px !important; }
+  .topbar { padding-top: max(12px, env(safe-area-inset-top)) !important; }
+  .player { bottom: 0 !important; padding-bottom: max(10px, env(safe-area-inset-bottom)) !important; }
+  .sp-dock.mini, .tv-dock.mini { bottom: max(16px, env(safe-area-inset-bottom)) !important; }
+  body:has(.player.show) .sp-dock.mini, body:has(.player.show) .tv-dock.mini { bottom: 84px !important; }
+  .apps, .reader { bottom: 0 !important; }
+}
