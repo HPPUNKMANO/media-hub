@@ -159,22 +159,30 @@ async def yt_feed(ch: str = "", cat: str = ""):
 _trend: dict = {"t": 0.0, "v": []}
 
 
+# Worldwide "Trending": the biggest non-music creators on YouTube, ranked by how fast their new videos get views.
+TREND_CHANNELS = ["@MrBeast", "@veritasium", "@mkbhd", "@kurzgesagt", "@MarkRober", "@LinusTechTips", "@DudePerfect",
+                  "@YesTheory", "@johnnyharris", "@RyanTrahan", "@Vsauce", "@smartereveryday", "@Wendoverproductions",
+                  "@CleoAbram", "@airrack", "@ZackDFilms", "@NASA", "@TED", "@NatGeo", "@Fireship", "@colinandsamir",
+                  "@TopGear", "@PremierPadelOfficial", "@HugoDecrypte", "@Micode"]
+MUSIC = re.compile(r"(official (music )?video|clip officiel|lyrics?|official audio|visuali[sz]er|\bft\.|\bfeat\.)", re.I)
+
+
 @router.get("/api/yt/trending")
 async def yt_trending():
-    """What people in France are watching on YouTube right now (public trending chart, refreshed hourly)."""
-    import html as _h
-    if time.time() - _trend["t"] > 3600 or not _trend["v"]:
-        try:
-            r = await http.get("https://kworb.net/youtube/trending/fr.html")
-            rows = re.findall(r'watch\?v=([\w-]{11})[^>]*>([^<]+)<', r.text)
-        except Exception:  # noqa: BLE001
-            rows = []
-        vids = []
-        for vid, title in dict(rows).items():
-            t = _h.unescape(title).strip()
-            ch, _, name = t.partition(" - ")
-            vids.append({"id": vid, "title": name or t, "channel": ch if name else "Trending", "published": "",
-                         "views": 0, "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", "short": False})
+    from datetime import datetime, timezone
+    if time.time() - _trend["t"] > 1800 or not _trend["v"]:
+        chans = await _channels("trend_channels", [(h, "Trending") for h in TREND_CHANNELS])
+        lists = await asyncio.gather(*(channel_videos(c["id"]) for c in chans))
+        now = datetime.now(timezone.utc)
+        scored = []
+        for v in (v for l in lists for v in l):
+            if v["short"] or MUSIC.search(v["title"]) or not v["published"]:
+                continue
+            hours = max((now - datetime.fromisoformat(v["published"])).total_seconds() / 3600, 3)
+            if hours > 24 * 10:
+                continue
+            scored.append((v["views"] / hours ** 0.85, v))   # views per hour, slightly favouring fresh uploads
+        vids = [v for _, v in sorted(scored, key=lambda x: x[0], reverse=True)][:48]
         if vids:
             _trend.update(t=time.time(), v=vids)
     return {"videos": _trend["v"]}

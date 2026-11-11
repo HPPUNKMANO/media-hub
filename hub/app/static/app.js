@@ -390,7 +390,7 @@ const pages = {
       ytSlide((ytc.videos || [])[0], "Clarkson, Hammond & May"),
       ess[1] && { kind: "news", kicker: `Actu · ${ess[1].count} journaux`, title: ess[1].title, text: ess[1].summary, img: ess[1].image, link: ess[1].link },
       ytSlide(notIn(), "Tes chaînes"),
-      ytSlide((tr.videos || [])[0], "Tendance en France"),
+      ytSlide((tr.videos || [])[0], "Trending dans le monde"),
     ].filter(Boolean);
     if (feats.length) {
       const hero = $("#hero"); hero.classList.remove("plain");
@@ -475,7 +475,7 @@ const pages = {
     const cats = () => [...new Set([...chans.map((c) => c.cat || "My channels"), ...extra])];
     const draw = async () => {
       store.set("hub-yt-ch", cur); store.set("hub-yt-cat", cat);
-      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">For you · mix</button><button class="chip trend-chip${cat === "__trending" ? " on" : ""}" data-k="__trending">Trending in France</button>` +
+      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">For you · mix</button><button class="chip trend-chip${cat === "__trending" ? " on" : ""}" data-k="__trending">Trending</button>` +
         cats().filter((k) => k !== "__trending").map((k) => `<button class="chip${cat === k && !cur ? " on" : ""}" data-k="${esc(k)}">${esc(k)}</button>`).join("") +
         `<button class="chip add-chip" id="yt-newcat">+ New filter</button><span style="width:100%"></span>` +
         chans.filter((c) => cat && (c.cat || "My channels") === cat).map((c) =>
