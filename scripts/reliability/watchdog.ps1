@@ -1,5 +1,5 @@
-<#
-  Media Hub watchdog — runs at logon and every 10 minutes (Task Scheduler, allowed to WAKE the PC from sleep).
+﻿<#
+  Media Hub watchdog — runs at logon and every 10 minutes (Task Scheduler; it never wakes the PC: closing the lid = sleep).
   Makes sure everything the phone app needs is up, restarts what is not, and writes a status file for the hub.
 #>
 $ErrorActionPreference = "Continue"
@@ -43,6 +43,7 @@ if ((Test-Path "$mtx\mediamtx.exe") -and (Test-Path "$mtx\mediamtx.yml")) {
 $ts = "C:\Program Files\Tailscale\tailscale.exe"
 if (Test-Path $ts) {
   if ((Get-Service Tailscale -ErrorAction SilentlyContinue).Status -ne "Running") { Start-Service Tailscale -ErrorAction SilentlyContinue; $status.restarted += "tailscale" }
+  if (-not (Get-Process tailscale-ipn -ErrorAction SilentlyContinue)) { Start-Process "C:\Program Files\Tailscale\tailscale-ipn.exe"; $status.restarted += "tailscale-app"; Log "tailscale: started the app"; Start-Sleep 10 }
   $serve = (& $ts serve status 2>$null) -join "`n"
   foreach ($p in @(@("8080", "443"), @("8096", "8096"), @("4533", "4533"), @("13378", "13378"))) {
     if ($serve -notmatch "127\.0\.0\.1:$($p[0])") {
