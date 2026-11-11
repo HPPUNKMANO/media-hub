@@ -76,6 +76,7 @@ async def _fetch(key, name, section, url) -> list[dict]:
 
 
 KNOWN_HOSTS: set[str] = set()   # filled from the feeds: the reader only opens articles we listed (no open proxy)
+JUNK = re.compile(r"(cookies?|abonnez-vous|abonnement|newsletter|lire aussi|à lire aussi|lire dans l.app|ouvre un nouvel onglet|nouvel onglet|sauvegarder|copier le lien|lien copié|partager|facebook|messenger|whatsapp|linkedin|twitter|\bX\b$|se connecter|créer un compte|s.inscrire|publicité|google news|google discover|réagir|commentaires?|subscribe|sign up|log in|tous droits|©)", re.I)
 P_TAG = re.compile(r"<(p|h2|h3|li|blockquote)\b[^>]*>(.*?)</\1>", re.I | re.S)
 
 
@@ -107,7 +108,9 @@ async def read(url: str):
         t = _text(inner)
         if len(t) < 40 and tag.lower() == "p":
             continue
-        if re.search(r"(cookies?|abonnez-vous|newsletter|Lire aussi|À lire aussi|subscribe|sign up|Tous droits)", t, re.I) and len(t) < 200:
+        if tag.lower() == "li" and len(t) < 70:   # menus, share buttons, tag lists
+            continue
+        if JUNK.search(t) and len(t) < 260:
             continue
         blocks.append({"t": tag.lower(), "x": t})
     title = re.search(r'<meta property="og:title" content="([^"]+)"', page)
