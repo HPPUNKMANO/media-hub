@@ -584,3 +584,16 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
 .off-server { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .off-server code { flex: 1; min-width: 0; padding: 9px 10px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .off-card > .btn:last-child { align-self: flex-start; }
+
+/* way out of the in-hub apps (phone) */
+.apps-nav { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 8px; height: 34px; padding: 0 12px; cursor: pointer; font-weight: 600; font-size: 13.5px; flex: none; }
+.apps-nav:hover { border-color: var(--line-2); }
+.apps-menu { display: none; }
+.apps-tabs { overflow-x: auto; scrollbar-width: none; }
+.apps-tabs a { white-space: nowrap; }
+@media (max-width: 860px) {
+  .apps-menu { display: inline-block; }
+  .apps-tabs { padding-top: max(10px, env(safe-area-inset-top)); gap: 6px; }
+  .apps-nav span { display: none; }
+  .apps { z-index: 50; }
+}

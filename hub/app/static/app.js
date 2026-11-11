@@ -37,10 +37,12 @@ function openApp(service, path) {
     f.src = want;   // only a hash change for Jellyfin/Navidrome: no reload
   }
   Object.entries(frames).forEach(([k, x]) => x.classList.toggle("on", k === service));
-  $("#apps-tabs").innerHTML = Object.keys(APP_HOME).map((k) =>
+  $("#apps-tabs").innerHTML = `<button class="apps-nav" id="apps-back" title="Back to the hub">← <span>Retour</span></button><button class="apps-nav apps-menu" id="apps-menu" title="Menu">☰</button>` + Object.keys(APP_HOME).map((k) =>
     `<a href="${appLink(k)}" class="${k === service ? "on" : ""}${frames[k] ? " live" : ""}">${APP_NAME[k]}</a>`).join("") +
     `<button class="apps-reload" id="apps-reload" title="Back to the start of this app">⟲</button>`;
   $("#apps-reload").onclick = () => { f.src = serviceUrl(service, APP_HOME[service]); };
+  $("#apps-back").onclick = () => { if (history.length > 1 && document.referrer !== location.href) history.back(); else location.hash = "#home"; };
+  $("#apps-menu").onclick = () => setNav(true);
   document.body.classList.add("in-app");
   document.querySelectorAll("#service-links a").forEach((a) => a.classList.toggle("active", a.dataset.app === service));
   return true;
