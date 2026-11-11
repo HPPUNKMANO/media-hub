@@ -33,16 +33,24 @@ async def icy_title(url: str, ua: str) -> dict:
             metaint = int(r.headers.get("icy-metaint", "0") or 0)
             if not metaint:
                 return {}
-            buf = b""
+            # walk through successive metadata blocks: many stations send empty titles most of the time
+            # and the real "Artist - Title" only every few blocks
+            buf, pos, blocks, start = b"", metaint, 0, time.time()
             async for chunk in r.aiter_bytes():
                 buf += chunk
-                if len(buf) > metaint + 1:
-                    length = buf[metaint] * 16
-                    if len(buf) >= metaint + 1 + length:
-                        meta = buf[metaint + 1: metaint + 1 + length].decode("utf-8", "replace")
+                while len(buf) > pos:
+                    length = buf[pos] * 16
+                    if len(buf) < pos + 1 + length:
+                        break
+                    if length:
+                        meta = buf[pos + 1: pos + 1 + length].decode("utf-8", "replace")
                         m = re.search(r"StreamTitle='(.*?)';", meta)
-                        return _clean(m.group(1)) if m else {}
-                if len(buf) > metaint + 5000:
+                        info = _clean(m.group(1)) if m else {}
+                        if info:
+                            return info
+                    blocks += 1
+                    pos += 1 + length + metaint
+                if blocks > 400 or time.time() - start > 7:
                     break
     return {}
 

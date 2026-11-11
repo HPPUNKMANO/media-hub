@@ -29,6 +29,6 @@ foreach ($c in $cand) {
   if ((($out | Select-Object -Last 1) -in '200', '206') -and (($out -join "`n") -match '#EXTM3U')) { $good += $c }
 }
 "working: $($good.Count)"
-$add = foreach ($g in $good) { ($g.Inf -replace 'group-title="[^"]*"', 'group-title="$Group"'); $g.Opts; $g.Url }
+$add = foreach ($g in $good) { ($g.Inf -replace 'group-title="[^"]*"', "group-title=`"$Group`""); $g.Opts; $g.Url }
 if ($add) { Add-Content -Path $Playlist -Value $add -Encoding UTF8 }
 $good | ForEach-Object { "  + " + ($_.Name -replace ' \(\d+p\)', '') }

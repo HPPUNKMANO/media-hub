@@ -20,22 +20,23 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 router = APIRouter()
-M3U = Path(os.environ.get("HUB_DATA_DIR", "/data")) / "iptv" / "france.m3u"
+IPTV_DIR = Path(os.environ.get("HUB_DATA_DIR", "/data")) / "iptv"   # freebox.m3u (your Freebox) + france.m3u (free channels)
 SECRET = secrets.token_bytes(32)
 DEFAULT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-GROUP_ORDER = ["Cinéma", "Séries", "Enfants & Anime", "Info", "Docs & Découverte", "Sport", "Musique"]
+GROUP_ORDER = ["TNT (Freebox)", "Cinéma", "Séries", "Enfants & Anime", "Info", "Docs & Découverte", "Sport", "Musique"]
 http = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0), follow_redirects=True)
 
 _cache: dict = {"mtime": 0.0, "channels": []}
 
 
 def channels() -> list[dict]:
-    if not M3U.exists():
+    files = [f for f in (IPTV_DIR / "freebox.m3u", IPTV_DIR / "france.m3u") if f.exists()]
+    if not files:
         return []
-    mtime = M3U.stat().st_mtime
+    mtime = sum(f.stat().st_mtime for f in files)
     if mtime != _cache["mtime"]:
         out, inf, ua = [], None, ""
-        for line in M3U.read_text(encoding="utf-8").splitlines():
+        for line in (l for f in files for l in f.read_text(encoding="utf-8").splitlines()):
             if line.startswith("#EXTINF"):
                 inf, ua = line, ""
                 m = re.search(r'http-user-agent="([^"]+)"', line)

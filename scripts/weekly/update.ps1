@@ -27,6 +27,8 @@ try {
   & powershell -ExecutionPolicy Bypass -File "$root\scripts\iptv\test.ps1" -Dir $tv | ForEach-Object { Log "tv: $_" }
   & powershell -ExecutionPolicy Bypass -File "$root\scripts\iptv\curate.ps1" -In "$tv\tested.m3u" -Dest "$tv\new.m3u" | Out-Null
   & powershell -ExecutionPolicy Bypass -File "$root\scripts\iptv\movies.ps1" -Playlist "$tv\new.m3u" | ForEach-Object { Log "tv-movies: $_" }
+  $sportNames = '^(?!.*(beIN|Eurosport|Sky Sport|Golf Channel|Polsat|CCTV|Golf \+|Persiana|TVMatic|Brondby|FCK|Deportes|Esportes|Hispanic|Portuguese|Spain|Italy|German|Handbold|Handboll|Fox Sports News| DK| NO| BR| AU| ES| DE)).*(Red Bull|FIFA|Tennis|Padel|Fight|Golazo|Golf|Racing|Pluto TV (Sport|Competition|E-Sports|Snooker|Fishing)|DAZN|Sport|Surf|Ski|Motor|Rugby|Basket|Olympic)'
+  & powershell -ExecutionPolicy Bypass -File "$root\scripts\iptv\movies.ps1" -Playlist "$tv\new.m3u" -Category sports -Group Sport -Names $sportNames -Max 30 | ForEach-Object { Log "tv-sport: $_" }
   $n = (Get-Content "$tv\new.m3u" -Encoding UTF8 | Where-Object { $_ -like "#EXTINF*" }).Count
   if ($n -ge 50) {
     foreach ($dst in "C:\MediaServer\jellyfin\config\iptv\france.m3u", "C:\MediaServer\hub\iptv\france.m3u") {
@@ -103,6 +105,22 @@ if (Test-Path $cand) {
   } catch { Log "candidates: ERROR $_" }
 }
 
+# ---------------------------------------------------------------- music: new free (Creative Commons) rap & pop albums
+foreach ($g in "rap", "pop") { & powershell -ExecutionPolicy Bypass -File "$root\scripts\music\fetch_cc.ps1" -Genre $g -Count 10 | Out-Null }
+Log "music: weekly rap + pop albums fetched (see C:\MediaServer\weekly\music-*.log)"
+
+# ---------------------------------------------------------------- backup of settings (accounts, watch history, channels, favourites)
+try {
+  $bk = "C:\MediaServer\backups"; New-Item -ItemType Directory -Force $bk | Out-Null
+  $tmp = Join-Path $env:TEMP "mediahub-backup"; Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue; New-Item -ItemType Directory $tmp | Out-Null
+  Copy-Item "$root\.env" $tmp -ErrorAction SilentlyContinue
+  foreach ($p in "hub", "navidrome", "audiobookshelf\config", "jellyfin\config\data", "jellyfin\config\config", "jellyfin\config\root", "jellyfin\config\iptv", "mediamtx\mediamtx.yml") {
+    $srcp = "C:\MediaServer\$p"; if (Test-Path $srcp) { $dst = Join-Path $tmp $p; New-Item -ItemType Directory -Force (Split-Path $dst) | Out-Null; Copy-Item $srcp $dst -Recurse -Force -ErrorAction SilentlyContinue }
+  }
+  Compress-Archive -Path "$tmp\*" -DestinationPath "$bk\settings-$stamp.zip" -Force
+  Get-ChildItem $bk -Filter "settings-*.zip" | Sort-Object Name -Descending | Select-Object -Skip 6 | Remove-Item -Force   # keep the last 6 weeks
+  Log "backup: settings-$stamp.zip"
+} catch { Log "backup: FAILED $_" }
 # ---------------------------------------------------------------- 5. rescans
 try { Invoke-RestMethod http://localhost:8096/Library/Refresh -Method Post -Headers $jfH | Out-Null; Log "jellyfin: library scan started" } catch { Log "jellyfin: scan failed" }
 try { $t = (Invoke-RestMethod http://localhost:8096/ScheduledTasks -Headers $jfH) | Where-Object Key -eq "RefreshGuide"; Invoke-RestMethod "http://localhost:8096/ScheduledTasks/Running/$($t.Id)" -Method Post -Headers $jfH | Out-Null; Log "jellyfin: tv guide refresh started" } catch { Log "jellyfin: guide refresh failed" }
