@@ -780,6 +780,27 @@ function splitWords(el) {
 }
 
 window.addEventListener("hashchange", route);
+/* ---- auto-refresh: news-type pages reload their content on their own (only when the app is visible and you are
+   at the top of the page, so it never jumps while you read or watch), and the app updates itself when a new version is deployed */
+const LIVE_PAGES = { journal: 10, ai: 30, home: 15, padel: 5, videos: 30, listen: 30 };   // minutes
+let lastRender = Date.now();
+window.addEventListener("hashchange", () => { lastRender = Date.now(); });
+setInterval(() => {
+  const page = location.hash.slice(1).split("?")[0] || "home";
+  const every = LIVE_PAGES[page];
+  if (!every || document.hidden || window.scrollY > 300 || Date.now() - lastRender < every * 60000) return;
+  lastRender = Date.now();
+  pages[page]?.();
+}, 60000);
+document.addEventListener("visibilitychange", () => {   // coming back to the app after a while = fresh page
+  const page = location.hash.slice(1).split("?")[0] || "home";
+  if (!document.hidden && LIVE_PAGES[page] && Date.now() - lastRender > LIVE_PAGES[page] * 60000) { lastRender = Date.now(); pages[page]?.(); }
+});
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!tvNow && !dockPath && audio.paused) location.reload(); });
+  setInterval(() => navigator.serviceWorker.getRegistration().then((r) => r?.update()), 3600000);
+}
+
 /* ---- padel live alert: red LIVE badge in the menu + banner on the home page, checked every 5 minutes */
 let PADEL_LIVE = [];
 async function checkPadel() {

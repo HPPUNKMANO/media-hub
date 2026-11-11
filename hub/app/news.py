@@ -77,7 +77,7 @@ async def _fetch(key, name, section, url) -> list[dict]:
 
 @router.get("/api/news")
 async def news():
-    if time.time() - _cache["t"] > 600 or not _cache["items"]:
+    if time.time() - _cache["t"] > 300 or not _cache["items"]:
         lists = await asyncio.gather(*(_fetch(*s) for s in SOURCES))
         items = sorted((i for l in lists for i in l), key=lambda i: i["ts"], reverse=True)
         _cache.update(t=time.time(), items=items)
