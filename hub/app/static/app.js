@@ -376,30 +376,43 @@ const pages = {
     const [d] = await Promise.all([api("/api/home"), loadCatalog()]);
     const favs = CATALOG.entries.filter((e) => FAVS.has(e.id));
 
-    // featured films: rotating, full-bleed artwork (Apple TV / Mubi style)
-    const feats = [...d.resume, ...d.latest].filter((x, i, a) => x.backdrop && a.findIndex((y) => y.id === x.id) === i).slice(0, 6);
+    // hero: a rotating mix of what's fresh — padel live, news, your channels (the British trio first), AI, trending
+    const [pd, nw, ytc, yta, tr] = await Promise.all([api("/api/padel"), api("/api/news"),
+      api("/api/yt/feed?cat=" + encodeURIComponent("Clarkson, Hammond & May")), api("/api/yt/feed"), api("/api/yt/trending")]);
+    const ytSlide = (v, kicker) => v && { kind: "yt", kicker, title: v.title, text: `${v.channel}${v.published ? " · " + timeAgo(v.published) : ""}`, img: `https://i.ytimg.com/vi/${v.id}/maxresdefault.jpg`, yt: v.id };
+    const ess = (nw.essentials || []).filter((s) => s.image);
+    const notIn = (cat) => (yta.videos || []).find((v) => !(ytc.videos || []).some((x) => x.id === v.id) && v.channel && !/top gear|grand tour|drivetribe/i.test(v.channel));
+    const feats = [
+      pd.live?.[0] && { kind: "padel", kicker: "Padel · LIVE", title: pd.live[0].title, text: `${pd.live.length} match${pd.live.length > 1 ? "es" : ""} en direct — ${pd.live[0].channel}`, img: pd.live[0].thumb.replace("hqdefault", "maxresdefault"), href: "#padel" },
+      ess[0] && { kind: "news", kicker: `À la une · ${ess[0].count} journaux`, title: ess[0].title, text: ess[0].summary, img: ess[0].image, link: ess[0].link },
+      ytSlide((ytc.videos || [])[0], "Clarkson, Hammond & May"),
+      ess[1] && { kind: "news", kicker: `Actu · ${ess[1].count} journaux`, title: ess[1].title, text: ess[1].summary, img: ess[1].image, link: ess[1].link },
+      ytSlide(notIn(), "Tes chaînes"),
+      ytSlide((tr.videos || [])[0], "Tendance en France"),
+    ].filter(Boolean);
     if (feats.length) {
       const hero = $("#hero"); hero.classList.remove("plain");
-      hero.innerHTML = feats.map((f, i) => `<div class="hero-bg${i ? "" : " on"}" style="--bgimg:url('${esc(f.backdrop)}')"></div>`).join("") +
+      hero.innerHTML = feats.map((f, i) => `<div class="hero-bg${i ? "" : " on"}" style="--bgimg:url('${esc(f.img)}')"></div>`).join("") +
         `<div class="hero-txt" id="hero-txt"></div>` +
-        (feats.length > 1 ? `<div class="hero-dots">${feats.map((_, i) => `<button data-i="${i}" class="${i ? "" : "on"}" aria-label="Featured ${i + 1}"></button>`).join("")}</div>` : "");
+        (feats.length > 1 ? `<div class="hero-dots">${feats.map((_, i) => `<button data-i="${i}" class="${i ? "" : "on"}" aria-label="Slide ${i + 1}"></button>`).join("")}</div>` : "");
       let cur = 0;
       const show = (i) => {
         cur = i; const f = feats[i];
         hero.querySelectorAll(".hero-bg").forEach((b, k) => b.classList.toggle("on", k === i));
         hero.querySelectorAll(".hero-dots button").forEach((b, k) => b.classList.toggle("on", k === i));
-        const meta = [f.subtitle, (f.genres || []).join(" · "), f.runtime ? `${f.runtime} min` : ""].filter(Boolean).join("  /  ");
-        $("#hero-txt").innerHTML = `<span class="kicker"><b>●</b> ${f.progress ? "Continue watching" : "Featured tonight"}</span>
-          <h1 id="hero-title">${esc(f.title)}</h1>${meta ? `<div class="meta-line">${esc(meta)}</div>` : ""}
-          <p>${esc(f.overview || "")}</p>
-          <div class="hero-btns"><a class="btn big" href="${appLink("jellyfin", f.link)}">${ICON.play} ${f.progress ? "Resume" : "Play"}</a>
-            <a class="btn big ghost" href="#watch">Browse films</a></div>`;
+        const btn = f.kind === "yt" ? `<a class="btn big vid" href="#" data-yt="${esc(f.yt)}" data-title="${esc(f.title)}">${ICON.play} Regarder</a>`
+          : f.kind === "news" ? `<a class="btn big art-card" href="${esc(f.link)}">Lire</a>`
+          : `<a class="btn big" href="${f.href}">${ICON.play} Voir le direct</a>`;
+        const more = f.kind === "yt" ? `<a class="btn big ghost" href="#videos">Toutes les vidéos</a>` : f.kind === "news" ? `<a class="btn big ghost" href="#journal">Le Journal</a>` : "";
+        $("#hero-txt").innerHTML = `<span class="kicker"><b>●</b> ${esc(f.kicker)}</span>
+          <h1 id="hero-title" class="${f.title.length > 70 ? "long" : ""}">${esc(f.title)}</h1>
+          ${f.text ? `<p>${esc(f.text)}</p>` : ""}<div class="hero-btns">${btn}${more}</div>`;
         splitWords($("#hero-title"));
       };
       show(0);
       hero.querySelector(".hero-dots")?.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) show(+b.dataset.i); });
       clearInterval(window.__heroTimer);
-      if (feats.length > 1) window.__heroTimer = setInterval(() => { if (!document.body.contains(hero)) return clearInterval(window.__heroTimer); show((cur + 1) % feats.length); }, 9000);
+      if (feats.length > 1) window.__heroTimer = setInterval(() => { if (!document.body.contains(hero)) return clearInterval(window.__heroTimer); show((cur + 1) % feats.length); }, 8000);
     } else splitWords($("#hero h1"));
 
     const R = CATALOG.radios.length, P = (CATALOG.spotify_playlists || []).length;
@@ -460,14 +473,20 @@ const pages = {
     const cats = () => [...new Set([...chans.map((c) => c.cat || "My channels"), ...extra])];
     const draw = async () => {
       store.set("hub-yt-ch", cur); store.set("hub-yt-cat", cat);
-      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">Latest</button><button class="chip trend-chip${cat === "__trending" ? " on" : ""}" data-k="__trending">Trending in France</button>` +
+      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">For you · mix</button><button class="chip trend-chip${cat === "__trending" ? " on" : ""}" data-k="__trending">Trending in France</button>` +
         cats().filter((k) => k !== "__trending").map((k) => `<button class="chip${cat === k && !cur ? " on" : ""}" data-k="${esc(k)}">${esc(k)}</button>`).join("") +
         `<button class="chip add-chip" id="yt-newcat">+ New filter</button><span style="width:100%"></span>` +
         chans.filter((c) => cat && (c.cat || "My channels") === cat).map((c) =>
         `<span class="chip ch-chip${cur === c.id ? " on" : ""}" data-c="${esc(c.id)}">${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : ""}${esc(c.title)}<button class="x" data-rm="${esc(c.id)}" title="Unfollow">✕</button></span>`).join("");
       $("#yt-grid").innerHTML = `<div class="skeleton"></div>`;
       $("#yt-add input").placeholder = cat ? `Add a channel to “${cat}”: paste its link or @name` : "Add a channel: paste its link or @name (pick a filter first to file it there)";
-      const f = cat === "__trending" && !cur ? await api("/api/yt/trending") : await api(`/api/yt/feed?${cur ? `ch=${encodeURIComponent(cur)}` : `cat=${encodeURIComponent(cat)}`}`);
+      let f;
+      if (!cat && !cur) {   // "Latest" = everything mixed: all your channels (AI, padel, self-improvement, the trio…) + a trending video every 4
+        const [mine, tr] = await Promise.all([api("/api/yt/feed"), api("/api/yt/trending")]);
+        const out = [], t = [...(tr.videos || [])];
+        (mine.videos || []).forEach((v, i) => { out.push(v); if (i % 3 === 2 && t.length) out.push(t.shift()); });
+        f = { videos: out };
+      } else f = cat === "__trending" && !cur ? await api("/api/yt/trending") : await api(`/api/yt/feed?${cur ? `ch=${encodeURIComponent(cur)}` : `cat=${encodeURIComponent(cat)}`}`);
       $("#yt-grid").innerHTML = (f.videos || []).map(videoCard).join("") ||
         `<div class="empty">${cat && !chans.some((c) => c.cat === cat) ? `“${esc(cat)}” is empty — add a channel to it with the box above.` : "No videos yet."}</div>`;
     };

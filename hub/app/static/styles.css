@@ -543,3 +543,8 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
 .journal-cols .lead-story .art-img { min-height: 280px; }
 
 .ch-name .hd { font: 600 9px/1 var(--mono); letter-spacing: .06em; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); padding: 2px 4px; border-radius: 3px; vertical-align: 2px; }
+
+.hero .btn { display: inline-flex !important; width: auto; min-height: 0; }
+.hero .btn.art-card, .hero .btn.vid { border-radius: 8px; padding: 12px 20px; transform: none; }
+.hero h1.long { font-size: clamp(34px, 3.6vw, 54px); line-height: 1.05; }
+.hero-bg { background-position: center; }
