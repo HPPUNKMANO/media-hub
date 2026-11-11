@@ -759,6 +759,32 @@ const pages = {
     await draw();
   },
 
+  async offline() {
+    const host = (() => { try { return new URL(CONFIG.lan_url).hostname; } catch { return location.hostname; } })();
+    const apps = [
+      { name: "Streamyfin", what: "Films & séries", icon: "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/e1/9e/5d/e19e5d72-57b0-180c-d58b-bd972801f633/icon-ios-liquid-glass-0-0-1x_U007epad-0-1-sRGB-85-220.png/512x512bb.jpg",
+        store: "https://apps.apple.com/fr/app/streamyfin/id6593660679", server: `https://${host}:8096`,
+        steps: ["Installe Streamyfin et ouvre-la.", "« Server URL » : colle l'adresse ci-dessous, puis Connect.", "Identifiant HP + ton mot de passe.", "Ouvre un film ou un épisode → bouton Télécharger (flèche ↓). Il est ensuite dans « Downloads », même sans réseau."] },
+      { name: "Amperfy", what: "Musique", icon: "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/f5/3d/7c/f53d7c35-05c6-4b5b-51fb-e8a8e59f8d32/AmperfyAppIcon-0-0-1x_U007epad-0-0-0-1-0-sRGB-85-220.png/512x512bb.jpg",
+        store: "https://apps.apple.com/fr/app/amperfy-music/id1530145038", server: `https://${host}:4533`,
+        steps: ["Installe Amperfy et ouvre-la.", "« Server URL » : colle l'adresse ci-dessous.", "Username HP + ton mot de passe → Login.", "Sur un album ou une playlist : ⋯ → Download. La musique reste sur l'iPhone, sans réseau."] },
+      { name: "ShelfPlayer", what: "Livres audio & podcasts", icon: "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/2b/c8/8e/2bc88e4a-d864-459f-06c7-9beb5e06cfe5/ShelfPlayer-0-0-1x_U007epad-0-0-0-1-0-sRGB-85-220.png/512x512bb.jpg",
+        store: "https://apps.apple.com/fr/app/shelfplayer-livres-audio/id6475221163", server: `https://${host}:13378`,
+        steps: ["Installe ShelfPlayer et ouvre-la.", "Ajoute un serveur : colle l'adresse ci-dessous.", "HP + ton mot de passe.", "Sur un livre ou un épisode : Télécharger. Parfait pour le métro ou l'avion."] },
+    ];
+    view.innerHTML = `<h1>Hors <em>connexion</em></h1><p class="lead">Pour l'avion, le métro ou la campagne : ces apps iPhone gratuites téléchargent <b>ton</b> contenu depuis ton serveur, et le lisent ensuite sans réseau. Fais les réglages une fois, avec Tailscale activé.</p>
+      <div class="off-grid">${apps.map((a) => `<section class="off-card">
+        <div class="off-head"><img src="${esc(a.icon)}" alt=""><div><span class="kicker">${esc(a.what)}</span><h2>${esc(a.name)}</h2></div><span class="tag cost">Gratuit</span></div>
+        <ol class="steps">${a.steps.map((s) => `<li>${esc(s)}</li>`).join("")}</ol>
+        <div class="off-server"><code>${esc(a.server)}</code><button class="btn ghost copy" data-copy="${esc(a.server)}">Copier</button></div>
+        <a class="btn" href="${esc(a.store)}" target="_blank" rel="noopener">Ouvrir dans l'App Store</a></section>`).join("")}</div>
+      <p class="lead small" style="margin-top:22px">Pourquoi pas eSound ou les apps « YouTube hors-ligne » ? Elles téléchargent la musique de YouTube, ce que YouTube et les artistes n'autorisent pas — et ces apps disparaissent souvent de l'App Store. Ici, tout vient de ton propre serveur.</p>`;
+    view.querySelectorAll(".copy").forEach((b) => b.onclick = async () => {
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copié ✓"; } catch { b.textContent = "Sélectionne et copie"; }
+      setTimeout(() => (b.textContent = "Copier"), 2000);
+    });
+  },
+
   async phone() {
     const lan = CONFIG.lan_url || `${location.protocol}//${location.host}`;
     view.innerHTML = `<h1>Install the app</h1><p class="lead">Use Media Hub like a real app, on this PC and on your phone.</p>

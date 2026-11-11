@@ -572,3 +572,15 @@ body.in-app main { visibility: hidden; height: 100vh; overflow: hidden; }
   body:has(.player.show) .sp-dock.mini, body:has(.player.show) .tv-dock.mini { bottom: 84px !important; }
   .apps, .reader { bottom: 0 !important; }
 }
+
+/* offline apps page */
+.off-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 20px; }
+.off-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.off-head { display: flex; gap: 14px; align-items: center; }
+.off-head img { width: 56px; height: 56px; border-radius: 13px; }
+.off-head h2 { border: 0 !important; padding: 0 !important; margin: 4px 0 0 !important; counter-increment: none !important; font-size: 28px !important; }
+.off-head h2::before { display: none; }
+.off-head .tag { margin-left: auto; }
+.off-server { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.off-server code { flex: 1; min-width: 0; padding: 9px 10px; border-radius: 8px; background: var(--bg-2); border: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.off-card > .btn:last-child { align-self: flex-start; }
