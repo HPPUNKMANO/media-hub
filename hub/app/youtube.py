@@ -156,6 +156,30 @@ async def yt_feed(ch: str = "", cat: str = ""):
     return {"videos": vids[:120]}
 
 
+_trend: dict = {"t": 0.0, "v": []}
+
+
+@router.get("/api/yt/trending")
+async def yt_trending():
+    """What people in France are watching on YouTube right now (public trending chart, refreshed hourly)."""
+    import html as _h
+    if time.time() - _trend["t"] > 3600 or not _trend["v"]:
+        try:
+            r = await http.get("https://kworb.net/youtube/trending/fr.html")
+            rows = re.findall(r'watch\?v=([\w-]{11})[^>]*>([^<]+)<', r.text)
+        except Exception:  # noqa: BLE001
+            rows = []
+        vids = []
+        for vid, title in dict(rows).items():
+            t = _h.unescape(title).strip()
+            ch, _, name = t.partition(" - ")
+            vids.append({"id": vid, "title": name or t, "channel": ch if name else "Trending", "published": "",
+                         "views": 0, "thumb": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", "short": False})
+        if vids:
+            _trend.update(t=time.time(), v=vids)
+    return {"videos": _trend["v"]}
+
+
 @router.get("/api/ai")
 async def ai_news():
     chans = await _channels("ai_channels", AI_CHANNELS)

@@ -291,7 +291,21 @@ document.addEventListener("click", async (e) => {
 });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("#rd-back")?.click(); });
 
-const timeAgo = (iso) => { const s = (Date.now() - new Date(iso)) / 1000; return s < 3600 ? `${Math.max(1, Math.round(s / 60))} min` : s < 86400 ? `${Math.round(s / 3600)} h` : s < 2592000 ? `${Math.round(s / 86400)} d` : `${Math.round(s / 2592000)} mo`; };
+/* ---- AI recap blocks: text + images, plus the week's videos (after the news) and an interactive 3D model (after the showcase) */
+function recapSection(s, rc) {
+  const item = (i) => `<div class="recap-item${i.image ? " has-img" : ""}">${i.image ? `<img class="recap-img" src="${esc(i.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.remove('has-img');this.remove()">` : ""}<div><h3>${esc(i.title)}</h3><p>${esc(i.text)}</p>${i.source ? `<span class="recap-src">${esc(i.source)}</span>` : ""}</div></div>`;
+  let html = `<section class="recap-sec"><h2>${esc(s.title)}</h2><div class="recap-items">${(s.items || []).map(item).join("")}</div></section>`;
+  if (s.id === "news" && rc.videos?.length) {
+    html += `<section class="recap-sec"><h2>À regarder</h2><div class="tv-stage media-stage"><div class="tv-hint">Choisis une vidéo</div></div><div class="vid-grid">${rc.videos.map((v) =>
+      videoCard({ id: v.youtube_id, title: v.title, channel: v.why || "", published: "", thumb: `https://i.ytimg.com/vi/${v.youtube_id}/hqdefault.jpg` })).join("")}</div></section>`;
+  }
+  if (s.id === "showcase" && rc.model3d?.embed) {
+    html += `<section class="recap-sec"><h2>En 3D <small>fais-le tourner</small></h2><div class="model3d"><iframe src="${esc(rc.model3d.embed)}?autostart=1&ui_infos=0&ui_watermark=0" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen title="${esc(rc.model3d.title || "3D")}"></iframe></div><p class="lead small"><b>${esc(rc.model3d.title || "")}</b> — ${esc(rc.model3d.text || "")}</p></section>`;
+  }
+  return html;
+}
+
+const timeAgo = (iso) => { if (!iso) return "trending"; const s = (Date.now() - new Date(iso)) / 1000; return s < 3600 ? `${Math.max(1, Math.round(s / 60))} min` : s < 86400 ? `${Math.round(s / 3600)} h` : s < 2592000 ? `${Math.round(s / 86400)} d` : `${Math.round(s / 2592000)} mo`; };
 const fmtViews = (n) => !n ? "" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M views` : n >= 1e3 ? `${Math.round(n / 1e3)}k views` : `${n} views`;
 const videoCard = (v) => `<a class="vid${tvNow && tvNow.yt === v.id ? " on" : ""}" href="https://www.youtube.com/watch?v=${esc(v.id)}" data-yt="${esc(v.id)}" data-title="${esc(v.title)}">
   <div class="vid-thumb"><img src="${esc(v.thumb)}" alt="" loading="lazy"><span class="vid-play">${ICON.play}</span></div>
@@ -446,14 +460,14 @@ const pages = {
     const cats = () => [...new Set([...chans.map((c) => c.cat || "My channels"), ...extra])];
     const draw = async () => {
       store.set("hub-yt-ch", cur); store.set("hub-yt-cat", cat);
-      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">Latest</button>` +
-        cats().map((k) => `<button class="chip${cat === k && !cur ? " on" : ""}" data-k="${esc(k)}">${esc(k)}</button>`).join("") +
+      $("#yt-chips").innerHTML = `<button class="chip${!cat && !cur ? " on" : ""}" data-k="">Latest</button><button class="chip trend-chip${cat === "__trending" ? " on" : ""}" data-k="__trending">Trending in France</button>` +
+        cats().filter((k) => k !== "__trending").map((k) => `<button class="chip${cat === k && !cur ? " on" : ""}" data-k="${esc(k)}">${esc(k)}</button>`).join("") +
         `<button class="chip add-chip" id="yt-newcat">+ New filter</button><span style="width:100%"></span>` +
         chans.filter((c) => cat && (c.cat || "My channels") === cat).map((c) =>
         `<span class="chip ch-chip${cur === c.id ? " on" : ""}" data-c="${esc(c.id)}">${c.avatar ? `<img src="${esc(c.avatar)}" alt="">` : ""}${esc(c.title)}<button class="x" data-rm="${esc(c.id)}" title="Unfollow">✕</button></span>`).join("");
       $("#yt-grid").innerHTML = `<div class="skeleton"></div>`;
       $("#yt-add input").placeholder = cat ? `Add a channel to “${cat}”: paste its link or @name` : "Add a channel: paste its link or @name (pick a filter first to file it there)";
-      const f = await api(`/api/yt/feed?${cur ? `ch=${encodeURIComponent(cur)}` : `cat=${encodeURIComponent(cat)}`}`);
+      const f = cat === "__trending" && !cur ? await api("/api/yt/trending") : await api(`/api/yt/feed?${cur ? `ch=${encodeURIComponent(cur)}` : `cat=${encodeURIComponent(cat)}`}`);
       $("#yt-grid").innerHTML = (f.videos || []).map(videoCard).join("") ||
         `<div class="empty">${cat && !chans.some((c) => c.cat === cat) ? `“${esc(cat)}” is empty — add a channel to it with the box above.` : "No videos yet."}</div>`;
     };
@@ -477,7 +491,7 @@ const pages = {
       if (r.detail || r.error) { $("#yt-err").textContent = r.detail || r.error; return; }
       $("#yt-err").textContent = ""; inp.value = ""; if (!chans.some((c) => c.id === r.id)) chans.unshift(r); cur = r.id; draw();
     };
-    if (cat && !cats().includes(cat)) cat = "";
+    if (cat && cat !== "__trending" && !cats().includes(cat)) cat = "";
     draw();
   },
 
@@ -489,8 +503,7 @@ const pages = {
     if (rc.sections) {
       $("#ai").innerHTML = `<article class="recap">
         <div class="recap-head"><span class="kicker">Semaine du ${esc(rc.date || "")}</span><h2 class="recap-title">${esc(rc.title || "")}</h2><p class="recap-intro">${esc(rc.intro || "")}</p></div>
-        ${rc.sections.map((s) => `<section class="recap-sec"><h2>${esc(s.title)}</h2><div class="recap-items">${(s.items || []).map((i) => `
-          <div class="recap-item"><h3>${esc(i.title)}</h3><p>${esc(i.text)}</p>${i.source ? `<span class="recap-src">${esc(i.source)}</span>` : ""}</div>`).join("")}</div></section>`).join("")}
+        ${rc.sections.map((s) => recapSection(s, rc)).join("")}
         ${rc.sources?.length ? `<details class="recap-sources"><summary>Sources (${rc.sources.length})</summary><ul>${rc.sources.map((s) => `<li>${esc(s.name)}</li>`).join("")}</ul></details>` : ""}
       </article>`;
       return;
