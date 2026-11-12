@@ -1,4 +1,4 @@
-"""Videos (a personal YouTube) and the AI news page.
+"""YouTube helpers (channel lookup + latest videos, used by Sport and the AI page) and the AI news page.
 
 Uses YouTube's public per-channel RSS feeds (no account, no API key) and plays videos with the
 privacy-enhanced embed (youtube-nocookie.com) inside the hub.
@@ -12,7 +12,7 @@ import time
 import xml.etree.ElementTree as ET
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter
 
 from . import news
 
@@ -22,16 +22,6 @@ http = httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0), follow_redire
                          headers={"User-Agent": UA, "Cookie": "SOCS=CAI; CONSENT=YES+1", "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8"})
 NS = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015", "media": "http://search.yahoo.com/mrss/"}
 
-# Starting subscriptions (the user can add/remove their own from the Videos page)
-DEFAULT_CHANNELS = [
-    ("@TopGear", "Clarkson, Hammond & May"), ("@TheGrandTour", "Clarkson, Hammond & May"), ("@DriveTribe", "Clarkson, Hammond & May"),
-    ("@TwoMinutePapers", "AI"), ("@aiexplained-official", "AI"), ("@mreflow", "AI"), ("@Fireship", "AI"),
-    ("@DefendIntelligence", "AI"), ("@Micode", "AI"), ("@Underscore_", "AI"),
-    ("@AliAbdaal", "Self-improvement"), ("@hubermanlab", "Self-improvement"), ("@MattDAvella", "Self-improvement"),
-    ("@TheDiaryOfACEO", "Self-improvement"), ("@ImprovementPill", "Self-improvement"), ("@OlivierRoland", "Self-improvement"),
-    ("@ErmiteModerne", "Self-improvement"),
-    ("@PremierPadelOfficial", "Padel"), ("@PadelFIP", "Padel"), ("@ThePadelSchool", "Padel"), ("@PadelMagazine", "Padel"),
-]
 AI_CHANNELS = ["@TwoMinutePapers", "@aiexplained-official", "@mreflow", "@Fireship", "@DefendIntelligence", "@Underscore_"]
 AI_SOURCES = [
     ("verge-ai", "The Verge", "AI", "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"),
@@ -118,74 +108,6 @@ async def _channels(key: str, defaults: list) -> list[dict]:
     resolved = [{**c, "cat": cat} for c, (_, cat) in zip(found, pairs) if c]
     kv_set(key, json.dumps(resolved))
     return resolved
-
-
-@router.get("/api/yt/channels")
-async def yt_channels():
-    return {"channels": await _channels("yt_channels_v2", DEFAULT_CHANNELS)}
-
-
-@router.post("/api/yt/channels")
-async def yt_add(request: Request):
-    body = await request.json()
-    ref = str(body.get("ref", ""))
-    ch = await resolve(ref)
-    if not ch:
-        raise HTTPException(404, "Channel not found — paste its link (youtube.com/@name) or its @name.")
-    chans = await _channels("yt_channels_v2", DEFAULT_CHANNELS)
-    if not any(c["id"] == ch["id"] for c in chans):
-        ch["cat"] = str(body.get("cat") or "My channels")[:40]
-        chans.insert(0, ch)
-        _db()[1]("yt_channels_v2", json.dumps(chans))
-    return ch
-
-
-@router.delete("/api/yt/channels/{cid}")
-async def yt_remove(cid: str):
-    chans = [c for c in await _channels("yt_channels_v2", DEFAULT_CHANNELS) if c["id"] != cid]
-    _db()[1]("yt_channels_v2", json.dumps(chans))
-    return {"ok": True}
-
-
-@router.get("/api/yt/feed")
-async def yt_feed(ch: str = "", cat: str = ""):
-    chans = await _channels("yt_channels_v2", DEFAULT_CHANNELS)
-    ids = [ch] if ch else [c["id"] for c in chans if not cat or c.get("cat") == cat]
-    lists = await asyncio.gather(*(channel_videos(i) for i in ids))
-    vids = sorted((v for l in lists for v in l if not v["short"]), key=lambda v: v["published"], reverse=True)
-    return {"videos": vids[:120]}
-
-
-_trend: dict = {"t": 0.0, "v": []}
-
-
-# Worldwide "Trending": the biggest non-music creators on YouTube, ranked by how fast their new videos get views.
-TREND_CHANNELS = ["@MrBeast", "@veritasium", "@mkbhd", "@kurzgesagt", "@MarkRober", "@LinusTechTips", "@DudePerfect",
-                  "@YesTheory", "@johnnyharris", "@RyanTrahan", "@Vsauce", "@smartereveryday", "@Wendoverproductions",
-                  "@CleoAbram", "@airrack", "@ZackDFilms", "@NASA", "@TED", "@NatGeo", "@Fireship", "@colinandsamir",
-                  "@TopGear", "@PremierPadelOfficial", "@HugoDecrypte", "@Micode"]
-MUSIC = re.compile(r"(official (music )?video|clip officiel|lyrics?|official audio|visuali[sz]er|\bft\.|\bfeat\.)", re.I)
-
-
-@router.get("/api/yt/trending")
-async def yt_trending():
-    from datetime import datetime, timezone
-    if time.time() - _trend["t"] > 1800 or not _trend["v"]:
-        chans = await _channels("trend_channels", [(h, "Trending") for h in TREND_CHANNELS])
-        lists = await asyncio.gather(*(channel_videos(c["id"]) for c in chans))
-        now = datetime.now(timezone.utc)
-        scored = []
-        for v in (v for l in lists for v in l):
-            if v["short"] or MUSIC.search(v["title"]) or not v["published"]:
-                continue
-            hours = max((now - datetime.fromisoformat(v["published"])).total_seconds() / 3600, 3)
-            if hours > 24 * 10:
-                continue
-            scored.append((v["views"] / hours ** 0.85, v))   # views per hour, slightly favouring fresh uploads
-        vids = [v for _, v in sorted(scored, key=lambda x: x[0], reverse=True)][:48]
-        if vids:
-            _trend.update(t=time.time(), v=vids)
-    return {"videos": _trend["v"]}
 
 
 @router.get("/api/ai")

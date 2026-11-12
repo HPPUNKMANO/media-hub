@@ -116,8 +116,41 @@ async def read(url: str):
     title = re.search(r'<meta property="og:title" content="([^"]+)"', page)
     image = re.search(r'<meta property="og:image" content="([^"]+)"', page)
     paywall = len(" ".join(b["x"] for b in blocks)) < 600
+    _highlight(blocks[:120], html.unescape(title.group(1)) if title else "")
     return {"title": html.unescape(title.group(1)) if title else "", "image": image.group(1) if image else "",
             "blocks": blocks[:120], "url": url, "short": paywall}
+
+
+SENT = re.compile(r"(?<=[.!?…])[»\"”]?\s+(?=[«\"“A-ZÀ-Ý0-9])")
+
+
+def _highlight(blocks: list[dict], title: str) -> None:
+    """Marks the sentences that answer the headline, so the reader can show them in bold.
+    The lead sentence (journalists put the answer first) + the sentences sharing the most words with the title,
+    with a bonus for figures and quotes. 3 to 5 sentences, about 1 in 4. Adds "s": [[sentence, bold], ...] to text blocks."""
+    tw = _words(title)
+    cands = []   # (score, block index, sentence index)
+    for bi, b in enumerate(blocks):
+        if b["t"] not in ("p", "li"):
+            continue
+        b["s"] = [[s, False] for s in SENT.split(b["x"]) if s.strip()]
+        for si, (s, _) in enumerate(b["s"]):
+            if len(s) < 50:
+                continue
+            w = _words(s)
+            score = 2.0 * len(w & tw) + (1.0 if re.search(r"\d", s) else 0) + (0.8 if re.search(r"[«“\"]", s) else 0)
+            score += max(0.0, 2.5 - 0.25 * len(cands))   # earlier sentences matter more
+            cands.append((score, bi, si))
+    if not cands:
+        return
+    pick = {(cands[0][1], cands[0][2])}   # the lead sentence
+    n = max(3, min(5, len(cands) // 4))
+    for score, bi, si in sorted(cands[1:], key=lambda c: -c[0]):
+        if len(pick) >= n or score < 3:
+            break
+        pick.add((bi, si))
+    for bi, si in pick:
+        blocks[bi]["s"][si][1] = True
 
 
 STOP = set("""le la les un une des du de d l au aux et ou en à a dans sur pour par avec sans sous ce cette ces son sa ses leur leurs

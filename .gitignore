@@ -8,3 +8,6 @@ __pycache__/
 *.db
 *.log
 *.m3u
+
+# generated knowledge graph (local analysis only)
+graphify-out/

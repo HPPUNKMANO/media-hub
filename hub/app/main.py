@@ -10,7 +10,8 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from starlette.background import BackgroundTask
 from fastapi.staticfiles import StaticFiles
 
 from . import clients
@@ -18,6 +19,12 @@ from . import clients
 HERE = Path(__file__).parent
 DATA_DIR = Path(os.environ.get("HUB_DATA_DIR", "/data"))
 CATALOG = json.loads((HERE / "data" / "catalog.json").read_text(encoding="utf-8"))
+NO_FILMS = ("public-domain", "films")   # the free films are gone from Discover (user: not worth it)
+CATALOG["entries"] = [e for e in CATALOG["entries"] if e.get("category") not in NO_FILMS]
+if isinstance(CATALOG.get("categories"), dict):
+    CATALOG["categories"] = {k: v for k, v in CATALOG["categories"].items() if k not in NO_FILMS}
+elif isinstance(CATALOG.get("categories"), list):
+    CATALOG["categories"] = [c for c in CATALOG["categories"] if (c.get("id") if isinstance(c, dict) else c) not in NO_FILMS]
 PORTS = {
     "jellyfin": int(os.environ.get("JELLYFIN_PORT", "8096")),
     "navidrome": int(os.environ.get("NAVIDROME_PORT", "4533")),
@@ -26,8 +33,15 @@ PORTS = {
 
 app = FastAPI(title="Media Hub", docs_url=None, redoc_url=None)
 
-from . import news, padel, radio, tv, youtube  # noqa: E402  (live TV relay, headlines, videos + AI news, padel lives)
-app.include_router(padel.router)
+from . import news, notes, radio, spcharts, sport, tv, youtube  # noqa: E402  (live TV relay, headlines, AI news, sport scores + lives)
+from . import auth  # noqa: E402
+app.middleware("http")(auth.middleware)   # every /api route needs a logged-in account
+app.include_router(auth.router)
+app.include_router(spcharts.router)   # Spotify top tracks / trending albums + artists, no account needed
+app.include_router(notes.router)   # tasks with reminders (push notifications) + daily notes
+app.add_event_handler("startup", notes.start)
+app.include_router(sport.router)
+app.add_event_handler("startup", sport.start)   # scores + lives kept fresh in the background
 app.include_router(radio.router)
 app.include_router(tv.router)
 app.include_router(news.router)
@@ -63,12 +77,17 @@ async def status():
 
 
 @app.get("/api/home")
-async def home():
+async def home(request: Request):
+    hidden = request.state.user["hidden"]
     resume, latest, recent_albums, new_albums, podcasts = await asyncio.gather(
         safe(clients.jf_resume(), []), safe(clients.jf_latest(), []),
         safe(clients.nd_albums("recent"), []), safe(clients.nd_albums("newest"), []),
         safe(clients.abs_recent(), []),
     )
+    if "watch" in hidden:   # a tab turned off for this account doesn't leak through the home page
+        resume, latest = [], []
+    if "listen" in hidden:
+        recent_albums, new_albums, podcasts = [], [], []
     return {"resume": resume, "latest": latest, "recent_albums": recent_albums,
             "new_albums": new_albums, "podcasts": podcasts}
 
@@ -90,7 +109,8 @@ async def listen():
 
 
 @app.get("/api/search")
-async def search(q: str):
+async def search(q: str, request: Request):
+    hidden = request.state.user["hidden"]
     q = q.strip()
     if len(q) < 2:
         return {"jellyfin": [], "navidrome": [], "catalog": []}
@@ -99,7 +119,7 @@ async def search(q: str):
     cat = [e for e in CATALOG["entries"]
            if ql in " ".join([e["name"], e.get("description", ""), " ".join(e.get("topics", [])),
                               e.get("category", "")]).lower()]
-    return {"jellyfin": jf, "navidrome": nd, "catalog": cat[:30]}
+    return {"jellyfin": [] if "watch" in hidden else jf, "navidrome": [] if "listen" in hidden else nd, "catalog": cat[:30]}
 
 
 _SPOTIFY_ART: dict[str, str] = {}
@@ -152,6 +172,7 @@ async def spotify_account():
 
 @app.post("/api/spotify/client")
 async def spotify_client(request: Request):
+    auth.need_admin(request)
     cid = str((await request.json()).get("client_id", "")).strip()
     if cid and not (len(cid) == 32 and cid.isalnum()):
         raise HTTPException(400, "A Spotify Client ID is 32 letters and digits.")
@@ -160,7 +181,8 @@ async def spotify_client(request: Request):
 
 
 @app.get("/api/spotify/login")
-async def spotify_login():
+async def spotify_login(request: Request):
+    auth.need_admin(request)
     import base64, hashlib, secrets
     from urllib.parse import urlencode
     from fastapi.responses import RedirectResponse
@@ -230,7 +252,8 @@ async def spotify_mine():
 
 
 @app.post("/api/spotify/logout")
-async def spotify_logout():
+async def spotify_logout(request: Request):
+    auth.need_admin(request)
     for k in ("sp_refresh", "sp_access", "sp_expires", "sp_name"):
         kv_set(k, "")
     return {"ok": True}
@@ -277,7 +300,8 @@ async def remove_favorite(entry_id: str):
 # ---- organizer proxy
 @app.get("/api/organizer/{path:path}")
 async def organizer_get(path: str):
-    if path not in {"report", "reports", "queues", "health"} and not path.startswith("reports/"):
+    import re as _re
+    if path not in {"report", "reports", "queues", "health"} and not _re.fullmatch(r"reports/[A-Za-z0-9_.-]+", path) or ".." in path:
         raise HTTPException(404)
     try:
         r = await clients.client.get(f"{clients.ORG_URL}/{path}")
@@ -295,6 +319,55 @@ async def organizer_run(request: Request):
         return JSONResponse(r.json(), status_code=r.status_code)
     except httpx.HTTPError:
         return JSONResponse({"error": "organizer is not reachable"}, status_code=503)
+
+
+# ---- tap an album = play it right away in the hub (no Navidrome login: the hub talks to it server-side)
+def _safe_id(v: str) -> str:
+    if not v or not v.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(404)
+    return v
+
+
+@app.get("/api/nd/album/{album_id}")
+async def nd_album_tracks(album_id: str):
+    try:
+        data = await clients.nd_call("getAlbum", id=_safe_id(album_id))
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"error": "music server not reachable"}, status_code=503)
+    a = (data or {}).get("album", {})
+    songs = [{"id": s["id"], "title": s.get("title", ""), "artist": s.get("artist", a.get("artist", "")),
+              "album": s.get("album", a.get("name", "")), "duration": s.get("duration", 0),
+              "image": f"/api/img/nd/{s.get('coverArt', album_id)}"} for s in a.get("song", [])]
+    return {"id": album_id, "name": a.get("name", ""), "artist": a.get("artist", ""), "songs": songs}
+
+
+@app.get("/api/nd/album/{album_id}/play")
+async def nd_album_play(album_id: str, request: Request, n: float = 0.0):
+    """Streams song number floor(n * count) of the album, so a tap can start the sound right away."""
+    try:
+        data = await clients.nd_call("getAlbum", id=_safe_id(album_id))
+    except Exception:  # noqa: BLE001
+        raise HTTPException(503, "music server not reachable")
+    songs = (data or {}).get("album", {}).get("song", [])
+    if not songs:
+        raise HTTPException(404, "no songs")
+    return await nd_stream(songs[min(len(songs) - 1, max(0, int(n * len(songs))))]["id"], request)
+
+
+@app.get("/api/nd/stream/{song_id}")
+async def nd_stream(song_id: str, request: Request):
+    """Proxies the original audio file, with byte ranges (iPhone Safari needs them to play and seek)."""
+    headers = {"Range": request.headers["range"]} if "range" in request.headers else {}
+    req = clients.client.build_request("GET", f"{clients.ND_URL}/rest/stream", headers=headers,
+                                       params=clients._nd_params(id=_safe_id(song_id), format="raw"),
+                                       timeout=httpx.Timeout(20.0, read=None))
+    try:
+        r = await clients.client.send(req, stream=True)
+    except httpx.HTTPError:
+        raise HTTPException(503, "music server not reachable")
+    keep = {k: r.headers[k] for k in ("content-type", "content-length", "content-range", "accept-ranges") if k in r.headers}
+    keep.setdefault("accept-ranges", "bytes")
+    return StreamingResponse(r.aiter_raw(), status_code=r.status_code, headers=keep, background=BackgroundTask(r.aclose))
 
 
 # ---- image proxy (keeps API keys server-side, adds browser caching)

@@ -143,7 +143,7 @@ async def nd_call(method: str, **params) -> dict:
 def _nd_album(a: dict) -> dict:
     return {"id": a["id"], "title": a.get("name") or a.get("album", ""), "subtitle": a.get("artist", ""),
             "type": "Album", "image": f"/api/img/nd/{a.get('coverArt', a['id'])}",
-            "link": f"/app/#/album/{a['id']}/show", "service": "navidrome"}
+            "link": f"/app/#/album/{a['id']}/show", "service": "navidrome", "nd_album": a["id"]}
 
 
 async def nd_albums(kind: str, size=16):
