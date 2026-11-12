@@ -675,7 +675,7 @@ const pages = {
     const date = new Date().toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
     view.innerHTML = `<section class="hero plain" id="hero"><div class="hero-txt">
         <span class="kicker">${esc(date)}</span><h1>${greet}.</h1>
-        <p>Films, live TV, music, radio, Spotify and books — one place, yours.</p></div></section>
+        <p>Films, live TV, music, radio and books — one place, yours.</p></div></section>
       <div id="home-rows"><div class="skeleton" style="margin-top:28px"></div></div>`;
     const [d] = await Promise.all([api("/api/home"), loadCatalog()]);
     const favs = CATALOG.entries.filter((e) => FAVS.has(e.id));
@@ -715,7 +715,7 @@ const pages = {
       if (feats.length > 1) window.__heroTimer = setInterval(() => { if (!document.body.contains(hero)) return clearInterval(window.__heroTimer); show((cur + 1) % feats.length); }, 8000);
     } else splitWords($("#hero h1"));
 
-    const R = CATALOG.radios.length, P = (CATALOG.spotify_playlists || []).length;
+    const R = CATALOG.radios.length;
     if (can("tv")) api("/api/tv/channels").then((t) => { const el = $("#tv-count"); if (el && t.channels) el.firstChild.textContent = t.channels.length; });
     checkSport();
     api("/api/weekly").then((w) => {
@@ -727,7 +727,6 @@ const pages = {
       `<div id="today"></div><div class="bento">
         <a class="big tv-cell" href="#tv"${can("tv") ? "" : " hidden"}><span class="eyebrow">Live TV</span>
           <div><div class="num" id="tv-count">—<small>channels</small></div><b>Films, series, news & kids — free, no account.</b></div><span class="go">${ICON.arrow}</span></a>
-        <a class="sp-cell" href="#spotify" hidden><span class="eyebrow">Spotify</span><div><div class="num">${P}<small>playlists</small></div><b>Top tracks, trending albums & artists</b></div><span class="go">${ICON.arrow}</span></a>
         <a href="#listen"${can("listen") ? "" : " hidden"}><span class="eyebrow">Radio</span><div><div class="num">${R}<small>stations</small></div><b>NRJ, Skyrock, FIP…</b></div><span class="go">${ICON.arrow}</span></a>
       </div>` +
       `<div id="sport-banner"></div><div id="onair"></div><div id="weekly"></div>` +
@@ -1021,20 +1020,12 @@ const pages = {
 
   async listen() {
     view.innerHTML = `<h1>Listen</h1><p class="lead">Your music on Navidrome, live radio, podcasts and free streaming services.</p><div id="l"><div class="skeleton"></div></div>`;
-    const [d, , sp] = await Promise.all([api("/api/listen"), loadCatalog(), api("/api/spotify")]);
+    const [d] = await Promise.all([api("/api/listen"), loadCatalog()]);
     const radios = [...CATALOG.radios, ...(d.radios || []).filter((r) => !CATALOG.radios.some((c) => c.url === r.streamUrl))];
     const music = CATALOG.entries.filter((e) => e.category === "music");
     const pods = CATALOG.entries.filter((e) => e.category === "podcasts");
-    // the real hits (known artists) are on Spotify and on the hit radios; the local library only holds free CC music
-    const lists = sp.playlists || [];
-    const cur = store.get("hub-spotify", "");
-    const spCard = (p) => `<a class="poster square sp-card${cur === "playlist/" + p.id ? " on" : ""}" href="https://open.spotify.com/playlist/${esc(p.id)}" data-sp="playlist/${esc(p.id)}" title="${esc(p.name)}">
-        <div class="art"><div class="fallback">♫</div><img src="${esc(p.image)}" alt="" loading="lazy" onerror="this.remove()"><span class="play-badge">▶</span></div>
-        <div class="t">${esc(p.name)}</div><div class="s">${esc(p.mood)}</div></a>`;
-    const spRow = (title, moods) => { const l = lists.filter((p) => moods.includes(p.mood)); return l.length ? `<h2>${title} <small>Spotify · ${l.length}</small></h2><div class="row">${l.map(spCard).join("")}</div>` : ""; };
     const hitRadios = radios.filter((r) => /rap|hip|hits|pop|dance/i.test(r.genre || ""));
     $("#l").innerHTML =
-      spRow("Rap", ["Rap FR", "Rap"]) + spRow("Pop & hits", ["Charts", "Pop FR", "Pop"]) +
       `<h2>Rap & pop radio <small>live hits</small></h2><div class="radios">${hitRadios.map(radioButton).join("")}</div>` +
       `<h2>Live radio <small>${radios.length} stations · official free streams</small></h2><div class="radios">${radios.map(radioButton).join("")}</div>` +
       row("Recently played", d.recent, { square: true }) +
@@ -1263,9 +1254,7 @@ const pages = {
     view.innerHTML = `<h1>Results for “${esc(q)}”</h1><div id="r"><div class="skeleton"></div></div>`;
     const [d] = await Promise.all([api(`/api/search?q=${encodeURIComponent(q)}`), loadCatalog()]);
     const any = d.jellyfin.length || d.navidrome.length || d.catalog.length;
-    const sp = `<a class="tile sp-search" href="https://open.spotify.com/search/${encodeURIComponent(q)}" target="_blank" rel="noopener">
-      <div class="ico sp-ico">♫</div><div><b>Search “${esc(q)}” on Spotify</b><span>Copy the link of what you find, then paste it on the Spotify page</span></div></a>`;
-    $("#r").innerHTML = sp + (!any ? `<div class="empty" style="margin-top:14px">No matches in your library or the free catalog.</div>` : "") +
+    $("#r").innerHTML = (!any ? `<div class="empty" style="margin-top:14px">No matches in your library or the free catalog.</div>` : "") +
       row("Movies & TV", d.jellyfin) + row("Music", d.navidrome, { square: true }) +
       (d.catalog.length ? `<h2>Free & legal sites <small>${d.catalog.length}</small></h2><div class="cards">${d.catalog.map(entryCard).join("")}</div>` : "");
   },
