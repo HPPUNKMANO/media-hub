@@ -35,7 +35,7 @@ TAB_KEYS = {k for k, _ in TABS}
 API_TABS = [("/api/watch", "watch"), ("/api/img/jf", "watch"), ("/api/tv/", "tv"), ("/api/sportrecap", "sportrecap"), ("/api/sport", "sport"),
             ("/api/listen", "listen"), ("/api/nd/", "listen"), ("/api/img/nd", "listen"), ("/api/radio/", "listen"),
             ("/api/news", "journal"), ("/api/read", "journal"), ("/api/ai", "ai"), ("/api/tasks", "notetask"),
-            ("/api/reminders", "notetask"), ("/api/notes", "notetask"), ("/api/spotify", "spotify"),
+            ("/api/reminders", "notetask"), ("/api/notes", "notetask"),
             ("/api/organizer", "organizer"), ("/api/status", "status")]
 
 

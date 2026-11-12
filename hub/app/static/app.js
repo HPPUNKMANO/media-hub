@@ -96,7 +96,6 @@ const ICON = {
   radio: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="2" y="8" width="20" height="13" rx="2"/><path d="M6 8l12-5"/><circle cx="16" cy="14.5" r="2.5"/><path d="M6 13h4M6 16h4"/></svg>`,
   play: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>`,
   arrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
-  sp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="12" r="10"/><path d="M7 9.5c3.5-1 7.5-.6 10.5 1.2M7.6 12.8c2.8-.8 6-.4 8.4 1M8.3 15.9c2.2-.6 4.5-.3 6.3.8"/></svg>`,
 };
 function serviceTiles() {
   const icons = { jellyfin: ICON.film, navidrome: ICON.music, audiobookshelf: ICON.book };
@@ -212,7 +211,6 @@ const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 
 const radioButton = (r) => `<button class="radio${playingUrl === (r.url || r.streamUrl) && !audio.paused ? " playing" : ""}" style="--h:${hue(r.name)}" data-name="${esc(r.name)}" data-url="${esc(r.url || r.streamUrl)}" data-genre="${esc(r.genre || "")}">
   <div class="dot">${esc(r.name.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 3).toUpperCase())}</div><div class="rt"><b>${esc(r.name)}</b><small>${esc(r.genre || "Internet radio")}</small></div><span class="eq"><i></i><i></i><i></i></span></button>`;
 audio.addEventListener("play", () => {
-  // the radio and Spotify share the speakers: pausing the radio is enough, Spotify has its own button
   const n = $("#now-name").textContent; $("#now-art").style.setProperty("--h", hue(n));
 });
 
@@ -298,7 +296,7 @@ function toast(msg) {
   clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
 }
 
-/* ------------------------------------------------------------ live TV (persistent player, like the Spotify dock) */
+/* ------------------------------------------------------------ live TV (persistent player) */
 const tvDock = $("#tv-dock");
 let tvHls = null, tvNow = null;
 function syncTvDock() {
@@ -429,80 +427,6 @@ const videoCard = (v) => `<a class="vid${tvNow && tvNow.yt === v.id ? " on" : ""
   <div class="vid-thumb"><img src="${esc(v.thumb)}" alt="" loading="lazy"><span class="vid-play">${ICON.play}</span>${ytBadge(v)}</div>
   <div class="vid-t">${esc(v.title)}</div><div class="vid-s">${esc(v.channel)} · ${timeAgo(v.published)}${v.views ? ` · ${fmtViews(v.views)}` : ""}</div></a>`;
 document.addEventListener("click", (e) => { const c = e.target.closest(".ch"); if (c) { e.preventDefault(); playTV(+c.dataset.ch); $("#tv-stage")?.scrollIntoView({ behavior: "smooth", block: "nearest" }); } });
-
-/* ------------------------------------------------------------ spotify (official embedded player) */
-const SPOTIFY_TYPES = ["track", "album", "playlist", "artist", "episode", "show"];
-function parseSpotify(input) {
-  const s = String(input || "").trim();
-  let m = s.match(/^spotify:(\w+):([A-Za-z0-9]+)$/);
-  if (!m) m = s.match(/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(\w+)\/([A-Za-z0-9]+)/);
-  return m && SPOTIFY_TYPES.includes(m[1]) ? `${m[1]}/${m[2]}` : null;
-}
-const spotifyFrame = (path, height = 452) =>
-  `<iframe class="sp-frame" src="https://open.spotify.com/embed/${esc(path)}?utm_source=generator&theme=0" height="${height}"
-    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" title="Spotify player"></iframe>`;
-/* The Spotify iframe lives OUTSIDE #view, so changing page never destroys it (= music keeps playing).
-   On the Spotify page it is laid over the #sp-player placeholder; elsewhere it shrinks to a mini player. */
-const dock = $("#sp-dock");
-let dockPath = null;
-function syncDock() {
-  if (!dockPath) { dock.hidden = true; return; }
-  dock.hidden = false;
-  const ph = $("#sp-player");
-  if (ph) {
-    const r = ph.getBoundingClientRect();
-    dock.classList.add("big"); dock.classList.remove("mini");
-    Object.assign(dock.style, { top: `${r.top}px`, left: `${r.left}px`, width: `${r.width}px`, height: `${r.height}px` });
-  } else {
-    dock.classList.add("mini"); dock.classList.remove("big");
-    dock.style.cssText = "";
-  }
-}
-addEventListener("scroll", () => requestAnimationFrame(syncDock), { passive: true });
-addEventListener("resize", () => requestAnimationFrame(syncDock));
-function playSpotify(path) {
-  store.set("hub-spotify", path);
-  if (path !== dockPath) {
-    dockPath = path;
-    dock.innerHTML = `<div class="dock-bar"><a href="#spotify" title="Open Spotify page">♫ Spotify</a><button id="dock-x" title="Close the player">✕</button></div>${spotifyFrame(path)}`;
-    $("#dock-x").onclick = () => { dockPath = null; dock.innerHTML = ""; syncDock(); };
-  }
-  syncDock();
-  const app = $("#sp-app");
-  if (app) app.href = `spotify:${path.replace("/", ":")}`;
-  document.querySelectorAll(".sp-card").forEach((c) => c.classList.toggle("on", c.dataset.sp === path));
-}
-document.addEventListener("click", (e) => {
-  const c = e.target.closest(".sp-card"); if (!c) return;
-  e.preventDefault(); playSpotify(c.dataset.sp);
-  $("#sp-player")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-});
-
-/* Spotify charts: top tracks per chart, trending albums and artists (tap = plays in the Spotify player) */
-let spChartKey = store.get("hub-sp-chart", "global");
-async function spCharts() {
-  const box = $("#sp-charts");
-  if (!box) return;
-  const d = await api("/api/spotify/charts");
-  if (!$("#sp-charts")) return;
-  if (!d.charts?.length) { box.innerHTML = ""; return; }
-  const cur = store.get("hub-spotify", "");
-  const mmss = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
-  const chart = d.charts.find((c) => c.key === spChartKey) || d.charts[0];
-  const track = (t, i) => `<a class="sp-card sp-track${cur === "track/" + t.id ? " on" : ""}" href="https://open.spotify.com/track/${esc(t.id)}" data-sp="track/${esc(t.id)}">
-      <span class="n">${i + 1}</span><span class="cv">${t.image ? `<img src="${esc(t.image)}" alt="" loading="lazy">` : ""}</span>
-      <span class="tt"><b>${esc(t.title)}</b><small>${t.explicit ? '<i class="e">E</i>' : ""}${esc(t.artists)}</small></span><span class="d">${mmss(t.ms)}</span></a>`;
-  const card = (kind, x, round = false) => `<a class="poster square sp-card${round ? " round" : ""}${cur === `${kind}/${x.id}` ? " on" : ""}" href="https://open.spotify.com/${kind}/${esc(x.id)}" data-sp="${kind}/${esc(x.id)}" title="${esc(x.name)}">
-      <div class="art"><div class="fallback">♫</div><img src="${esc(x.image)}" alt="" loading="lazy" onerror="this.remove()"><span class="play-badge">▶</span></div>
-      <div class="t">${esc(x.name)}</div><div class="s">${esc(x.info.split(" · ").slice(0, kind === "album" ? 2 : 1).join(" · "))}</div></a>`;
-  box.innerHTML = `<h2>Top tracks <small>Spotify charts · updated ${new Date(d.updated * 1000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}</small></h2>
-    <div class="chips sp-tabs">${d.charts.map((c) => `<button class="chip${c.key === chart.key ? " on" : ""}" data-chart="${c.key}">${esc(c.label)}</button>`).join("")}
-      <a class="chip sp-card" href="https://open.spotify.com/playlist/${esc(chart.playlist)}" data-sp="playlist/${esc(chart.playlist)}">▶ Play all</a></div>
-    <div class="sp-tracks">${chart.tracks.map(track).join("")}</div>
-    ${d.albums.length ? `<h2>Trending albums <small>most played in the charts</small></h2><div class="row">${d.albums.map((a) => card("album", a)).join("")}</div>` : ""}
-    ${d.artists.length ? `<h2>Trending artists</h2><div class="row">${d.artists.map((a) => card("artist", a, true)).join("")}</div>` : ""}`;
-  box.querySelectorAll("[data-chart]").forEach((b) => b.onclick = () => { spChartKey = b.dataset.chart; store.set("hub-sp-chart", spChartKey); spCharts(); });
-}
 
 /* ------------------------------------------------------------ "Today" on the home page: weather, tasks, alarms, shopping, note */
 const WMO = [[0, "☀️", "Clear"], [1, "🌤️", "Mostly clear"], [2, "⛅", "Partly cloudy"], [3, "☁️", "Cloudy"], [45, "🌫️", "Fog"], [48, "🌫️", "Fog"],
@@ -930,71 +854,6 @@ const pages = {
     $("#tv-chips").onclick = (e) => { const b = e.target.closest(".chip"); if (b) { group = b.dataset.g; draw(); } };
     draw();
     if (!tvNow) { const first = d.channels.find((c) => c.group === group); if (first) playTV(store.get("hub-tv-last", first.id)); }
-  },
-
-  async spotify() {
-    view.innerHTML = `<h1>Spotify</h1><p class="lead">The official Spotify player, inside your hub. Log in once at
-      <a href="https://open.spotify.com" target="_blank" rel="noopener"><b>open.spotify.com</b></a> in this browser to hear full tracks.</p>
-      <div class="sp-top">
-        <div class="sp-player" id="sp-player"></div>
-        <div class="sp-side">
-          <form class="sp-paste" id="sp-form"><label for="sp-url">Play anything from Spotify</label>
-            <input id="sp-url" placeholder="Paste a Spotify link (song, album, artist, playlist, podcast)…" autocomplete="off">
-            <button class="btn sp">Play</button><small id="sp-err"></small></form>
-          <a class="tile" id="sp-app" href="spotify:"><div class="ico sp-ico">${ICON.sp}</div><div><b>Open in the Spotify app</b><span>Your installed app, same music</span></div></a>
-          <p class="lead small">Tip: in the Spotify app, <b>Share → Copy link</b> on any song, then paste it here.</p>
-        </div>
-      </div>
-      <div id="sp-lists"><div class="skeleton" style="margin-top:24px"></div></div>`;
-    playSpotify(dockPath || store.get("hub-spotify", "playlist/37i9dQZEVXbIPWwFssbupI"));   // reuse the live player if any
-    const d = await api("/api/spotify");
-    const lists = d.playlists || [];
-    const spCard = (p) => `
-      <a class="poster square sp-card" href="https://open.spotify.com/playlist/${esc(p.id)}" data-sp="playlist/${esc(p.id)}" title="${esc(p.name)}">
-        <div class="art"><div class="fallback">♫</div><img src="${esc(p.image)}" alt="" onerror="this.remove()"><span class="play-badge">▶</span></div>
-        <div class="t">${esc(p.name)}</div><div class="s">${esc(p.mood)}</div></a>`;
-    $("#sp-lists").innerHTML = `<div id="sp-charts"><div class="skeleton" style="margin-top:24px"></div></div>
-      <h2>Picked for you <small>${lists.length} playlists</small></h2><div class="grid">${lists.map(spCard).join("")}</div><div id="sp-mine"></div>`;
-    spCharts();
-    // the user's own playlists (needs a one-time connection)
-    const [acc, mine] = await Promise.all([api("/api/spotify/account"), api("/api/spotify/mine")]);
-    if (acc.connected && !mine.connected) {
-      // Spotify only opens its Web API to apps whose owner has Premium; everything above works without it
-      $("#sp-mine").innerHTML = `<h2>Your playlists <small><a href="#" id="sp-out">disconnect</a></small></h2>
-        <div class="panel sp-connect"><p class="lead small">Spotify only lets the hub read your own playlists with a <b>Premium</b> account.
-        Top tracks, albums, artists and playlists above work without it.</p></div>`;
-      $("#sp-out").onclick = async (e) => { e.preventDefault(); await api("/api/spotify/logout", { method: "POST" }); pages.spotify(); };
-    } else if (mine.connected) {
-      $("#sp-mine").innerHTML = `<h2>Your playlists <small>${esc(mine.name || "")} · <a href="#" id="sp-out">disconnect</a></small></h2>
-        <div class="grid">${mine.playlists.map(spCard).join("") || `<div class="empty">No playlists on this account yet.</div>`}</div>`;
-      $("#sp-out").onclick = async (e) => { e.preventDefault(); await api("/api/spotify/logout", { method: "POST" }); pages.spotify(); };
-    } else {
-      $("#sp-mine").innerHTML = `<h2>Your playlists <small>connect once</small></h2>
-        <div class="panel sp-connect">${acc.client_id ? `
-          <p>Last step: allow Media Hub to read your playlists.</p><a class="btn sp" href="/api/spotify/login">Connect my Spotify account</a>
-          <button class="btn ghost" id="sp-reset">Change Client ID</button>` : `
-          <ol class="steps">
-            <li>Open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener"><b>developer.spotify.com/dashboard</b></a> and log in with your Spotify account.</li>
-            <li><b>Create app</b> — name: <code>Media Hub</code>, description: <code>personal</code>, Redirect URI: <code>${esc(acc.redirect_uri)}</code> (click <b>Add</b>), tick <b>Web API</b>, then <b>Save</b>.</li>
-            <li>In the app's <b>Settings</b>, copy the <b>Client ID</b> and paste it here:</li>
-          </ol>
-          <form id="sp-cid" class="sp-cid"><input placeholder="Client ID (32 characters)" maxlength="32" autocomplete="off"><button class="btn sp">Save</button><small id="sp-cid-err"></small></form>`}
-        </div>`;
-      $("#sp-reset")?.addEventListener("click", async () => { await api("/api/spotify/client", { method: "POST", body: JSON.stringify({ client_id: "" }) }); pages.spotify(); });
-      $("#sp-cid")?.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const r = await api("/api/spotify/client", { method: "POST", body: JSON.stringify({ client_id: e.target.querySelector("input").value }) });
-        if (r.error || r.detail) $("#sp-cid-err").textContent = r.detail || r.error; else pages.spotify();
-      });
-    }
-    const cur = store.get("hub-spotify", "");
-    document.querySelectorAll(".sp-card").forEach((c) => c.classList.toggle("on", c.dataset.sp === cur));
-    $("#sp-form").onsubmit = (e) => {
-      e.preventDefault();
-      const p = parseSpotify($("#sp-url").value);
-      $("#sp-err").textContent = p ? "" : "That doesn't look like a Spotify link.";
-      if (p) { playSpotify(p); $("#sp-url").value = ""; }
-    };
   },
 
   async watch() {
@@ -1579,10 +1438,10 @@ async function route() {
   if (name.startsWith("app/")) {
     const ok = openApp(name.slice(4), new URLSearchParams(query || "").get("p"));
     document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.getAttribute("href") === location.hash));
-    if (ok) { syncDock(); syncTvDock(); return; }
+    if (ok) { syncTvDock(); return; }
   }
   closeApps();
-  let page = pages[name] && name !== "spotify" ? name : name === "padel" ? "sport" : "home";
+  let page = pages[name] ? name : name === "padel" ? "sport" : "home";
   if (!can(page === "tasks" || page === "notes" ? "notetask" : page)) page = "home";
   const navPage = page === "tasks" || page === "notes" ? "notetask" : page === "sportmatch" ? "sportrecap" : page;
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("active", a.dataset.page === navPage));
@@ -1594,8 +1453,8 @@ async function route() {
   }
   window.scrollTo(0, 0);
   if ((page === "tv" || page === "home") && can("tv")) onAirBox();
-  syncDock(); syncTvDock();
-  setTimeout(() => { syncDock(); syncTvDock(); }, 800);   // re-align once the page entrance animation has settled
+  syncTvDock();
+  setTimeout(() => { syncTvDock(); }, 800);   // re-align once the page entrance animation has settled
 }
 
 $("#search-form").addEventListener("submit", (e) => {
@@ -1658,7 +1517,7 @@ document.addEventListener("visibilitychange", () => {   // coming back to the ap
   if (!document.hidden && LIVE_PAGES[page] && Date.now() - lastRender > LIVE_PAGES[page] * 60000) { lastRender = Date.now(); pages[page]?.(); }
 });
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!tvNow && !dockPath && audio.paused) location.reload(); });
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (!tvNow && audio.paused) location.reload(); });
   setInterval(() => navigator.serviceWorker.getRegistration().then((r) => r?.update()), 3600000);
 }
 

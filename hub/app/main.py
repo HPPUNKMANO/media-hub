@@ -33,11 +33,10 @@ PORTS = {
 
 app = FastAPI(title="Media Hub", docs_url=None, redoc_url=None)
 
-from . import news, notes, radio, spcharts, sport, tv, youtube  # noqa: E402  (live TV relay, headlines, AI news, sport scores + lives)
+from . import news, notes, radio, sport, tv, youtube  # noqa: E402  (live TV relay, headlines, AI news, sport scores + lives)
 from . import auth  # noqa: E402
 app.middleware("http")(auth.middleware)   # every /api route needs a logged-in account
 app.include_router(auth.router)
-app.include_router(spcharts.router)   # Spotify top tracks / trending albums + artists, no account needed
 app.include_router(notes.router)   # tasks with reminders (push notifications) + daily notes
 app.add_event_handler("startup", notes.start)
 app.include_router(sport.router)
@@ -122,32 +121,7 @@ async def search(q: str, request: Request):
     return {"jellyfin": [] if "watch" in hidden else jf, "navidrome": [] if "listen" in hidden else nd, "catalog": cat[:30]}
 
 
-_SPOTIFY_ART: dict[str, str] = {}
-
-
-@app.get("/api/spotify")
-async def spotify():
-    """Curated Spotify playlists with their cover art (public oEmbed, no account or key needed)."""
-    async def art(pid: str) -> str:
-        if pid not in _SPOTIFY_ART:
-            try:
-                r = await clients.client.get("https://open.spotify.com/oembed",
-                                             params={"url": f"https://open.spotify.com/playlist/{pid}"}, timeout=8)
-                _SPOTIFY_ART[pid] = r.json().get("thumbnail_url", "")
-            except Exception:  # noqa: BLE001 - no cover is fine, retry next time
-                return ""
-        return _SPOTIFY_ART[pid]
-    lists = CATALOG.get("spotify_playlists", [])
-    images = await asyncio.gather(*(art(p["id"]) for p in lists))
-    return {"playlists": [{**p, "image": img} for p, img in zip(lists, images)]}
-
-
-# ---- Spotify account (Authorization Code + PKCE, no client secret needed).
-# The user creates a free "app" on developer.spotify.com and pastes its Client ID in the hub.
-SPOTIFY_REDIRECT = os.environ.get("SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8080/api/spotify/callback")
-SPOTIFY_SCOPES = "playlist-read-private playlist-read-collaborative user-library-read user-read-private"
-
-
+# ---- small key/value store (YouTube channel ids, sport channels, settings…)
 def kv_get(key: str) -> str:
     con = db()
     con.execute("CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT)")
@@ -162,101 +136,6 @@ def kv_set(key: str, value: str) -> None:
     con.execute("INSERT OR REPLACE INTO kv(k, v) VALUES(?, ?)", (key, value))
     con.commit()
     con.close()
-
-
-@app.get("/api/spotify/account")
-async def spotify_account():
-    return {"client_id": bool(kv_get("sp_client_id")), "connected": bool(kv_get("sp_refresh")),
-            "name": kv_get("sp_name"), "redirect_uri": SPOTIFY_REDIRECT}
-
-
-@app.post("/api/spotify/client")
-async def spotify_client(request: Request):
-    auth.need_admin(request)
-    cid = str((await request.json()).get("client_id", "")).strip()
-    if cid and not (len(cid) == 32 and cid.isalnum()):
-        raise HTTPException(400, "A Spotify Client ID is 32 letters and digits.")
-    kv_set("sp_client_id", cid)
-    return {"ok": True}
-
-
-@app.get("/api/spotify/login")
-async def spotify_login(request: Request):
-    auth.need_admin(request)
-    import base64, hashlib, secrets
-    from urllib.parse import urlencode
-    from fastapi.responses import RedirectResponse
-    cid = kv_get("sp_client_id")
-    if not cid:
-        raise HTTPException(400, "Add your Spotify Client ID first.")
-    verifier = secrets.token_urlsafe(64)[:96]
-    state = secrets.token_urlsafe(16)
-    kv_set("sp_verifier", verifier)
-    kv_set("sp_state", state)
-    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
-    q = urlencode({"client_id": cid, "response_type": "code", "redirect_uri": SPOTIFY_REDIRECT, "scope": SPOTIFY_SCOPES,
-                   "code_challenge_method": "S256", "code_challenge": challenge, "state": state})
-    return RedirectResponse(f"https://accounts.spotify.com/authorize?{q}")
-
-
-async def _sp_token(data: dict) -> dict:
-    r = await clients.client.post("https://accounts.spotify.com/api/token", data={**data, "client_id": kv_get("sp_client_id")})
-    r.raise_for_status()
-    tok = r.json()
-    kv_set("sp_access", tok["access_token"])
-    kv_set("sp_expires", str(time.time() + tok.get("expires_in", 3600) - 60))
-    if tok.get("refresh_token"):
-        kv_set("sp_refresh", tok["refresh_token"])
-    return tok
-
-
-@app.get("/api/spotify/callback")
-async def spotify_callback(code: str = "", state: str = "", error: str = ""):
-    from fastapi.responses import HTMLResponse
-    back = os.environ.get("HUB_PUBLIC_URL", "http://localhost:8080")
-    if error or not code or state != kv_get("sp_state"):
-        return HTMLResponse(f"<p>Spotify connection cancelled ({error or 'invalid state'}). <a href='{back}/#spotify'>Back</a></p>", 400)
-    await _sp_token({"grant_type": "authorization_code", "code": code, "redirect_uri": SPOTIFY_REDIRECT,
-                     "code_verifier": kv_get("sp_verifier")})
-    me = await _sp_api("/me")
-    kv_set("sp_name", (me or {}).get("display_name") or (me or {}).get("id", ""))
-    return HTMLResponse(f"<meta http-equiv='refresh' content='0;url={back}/#spotify'><p>Connected. <a href='{back}/#spotify'>Back to Media Hub</a></p>")
-
-
-async def _sp_api(path: str, **params):
-    if not kv_get("sp_refresh"):
-        return None
-    if time.time() > float(kv_get("sp_expires") or 0):
-        await _sp_token({"grant_type": "refresh_token", "refresh_token": kv_get("sp_refresh")})
-    r = await clients.client.get(f"https://api.spotify.com/v1{path}", params=params,
-                                 headers={"Authorization": f"Bearer {kv_get('sp_access')}"})
-    if r.status_code == 401:
-        await _sp_token({"grant_type": "refresh_token", "refresh_token": kv_get("sp_refresh")})
-        r = await clients.client.get(f"https://api.spotify.com/v1{path}", params=params,
-                                     headers={"Authorization": f"Bearer {kv_get('sp_access')}"})
-    r.raise_for_status()
-    return r.json()
-
-
-@app.get("/api/spotify/mine")
-async def spotify_mine():
-    try:
-        data = await _sp_api("/me/playlists", limit=50)
-    except httpx.HTTPError as exc:
-        return JSONResponse({"error": f"Spotify: {exc.__class__.__name__}"}, status_code=502)
-    if data is None:
-        return {"connected": False, "playlists": []}
-    out = [{"id": p["id"], "name": p["name"], "mood": f"{p.get('tracks', {}).get('total', '')} tracks".strip(),
-            "image": (p.get("images") or [{}])[0].get("url", "")} for p in data.get("items", []) if p]
-    return {"connected": True, "name": kv_get("sp_name"), "playlists": out}
-
-
-@app.post("/api/spotify/logout")
-async def spotify_logout(request: Request):
-    auth.need_admin(request)
-    for k in ("sp_refresh", "sp_access", "sp_expires", "sp_name"):
-        kv_set(k, "")
-    return {"ok": True}
 
 
 @app.get("/api/weekly")
