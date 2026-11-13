@@ -13,6 +13,10 @@ powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP RTCWAKE 1
 powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP RTCWAKE 1
 powercfg /setactive SCHEME_CURRENT
 powercfg /hibernate on 2>$null
+# after a wake by timer Windows goes back to sleep after the "unattended" timeout (default 2 min, hidden setting):
+# 30 min leaves time for the keeper to start (no admin needed for the current scheme)
+powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP 7bc4a2f9-d8fc-4469-b07b-33eb785aaca0 1800
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP 7bc4a2f9-d8fc-4469-b07b-33eb785aaca0 1800
 
 # 22:00 = start waiting: night_off.ps1 hibernates only after 20 min without anyone using the PC
 $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable:$false -ExecutionTimeLimit (New-TimeSpan -Hours 23)
@@ -23,8 +27,10 @@ Register-ScheduledTask -TaskName $offName -Trigger (New-ScheduledTaskTrigger -Da
 $watchdog = Join-Path $PSScriptRoot "watchdog.ps1"
 $wakeSet = New-ScheduledTaskSettingsSet -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
 $radios = Join-Path $PSScriptRoot "radios.ps1"
-# leave airplane mode first, then check the services
-$onAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command `"& '$radios' -State On; & '$watchdog'`""
-Register-ScheduledTask -TaskName $onName -Trigger (New-ScheduledTaskTrigger -Daily -At $On) -Action $onAction -Settings $wakeSet `
+# morning.ps1: screen on, all-day keeper, radios on, watchdog
+$onAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$(Join-Path $PSScriptRoot 'morning.ps1')`""
+# second trigger 10 min later: if Windows put the PC back to sleep anyway, it wakes it again (harmless when awake)
+$onTriggers = @((New-ScheduledTaskTrigger -Daily -At $On), (New-ScheduledTaskTrigger -Daily -At ([datetime]$On).AddMinutes(10)))
+Register-ScheduledTask -TaskName $onName -Trigger $onTriggers -Action $onAction -Settings $wakeSet `
   -Description "Wakes the PC every morning and checks the Media Hub services." -Force | Out-Null
 "Night schedule set: hibernate at $Off, wake at $On."
