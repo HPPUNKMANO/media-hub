@@ -309,6 +309,10 @@ td code { word-break: break-all; }
 body:has(.player.show) .tv-dock.mini { bottom: 86px; }
 .tv-bar { color: #eee !important; }
 .tv-bar b { color: var(--accent); }
+.tv-cc { position: absolute; top: 10px; right: 10px; z-index: 2; padding: 4px 8px; border-radius: 6px; border: 1px solid rgba(255,255,255,.35);
+  background: rgba(0,0,0,.55); color: #ccc; font: 700 11px var(--mono); letter-spacing: .06em; cursor: pointer; }
+.tv-dock:not(.big) .tv-cc { top: 40px; }
+.tv-cc.on { background: #fff; color: #000; border-color: #fff; }
 .tv-msg { position: absolute; inset: auto 0 0 0; padding: 10px 14px; font: 500 12px var(--mono); color: #ddd; background: linear-gradient(transparent, rgba(0,0,0,.85)); pointer-events: none; }
 .tv-msg[hidden] { display: none; }
 .tv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }

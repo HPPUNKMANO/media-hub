@@ -318,24 +318,38 @@ async function playTV(id) {
   if (!tvDock.querySelector("video")) {
     tvDock.innerHTML = "";
     tvDock.innerHTML = `<div class="dock-bar tv-bar"><a href="#tv"><b>●</b> <span id="tv-name"></span></a><button id="tv-x" title="Close">✕</button></div>
-      <video id="tv-video" controls autoplay playsinline></video><div class="tv-msg" id="tv-msg"></div>`;
+      <video id="tv-video" controls autoplay playsinline></video><div class="tv-msg" id="tv-msg"></div>
+      <button class="tv-cc" id="tv-cc" title="Sous-titres" aria-pressed="false">CC</button>`;
     $("#tv-x").onclick = () => { tvHls?.destroy(); tvHls = null; tvNow = null; tvDock.innerHTML = ""; syncTvDock(); markTv(); };
   }
   if (!audio.paused) $("#stop").click();   // one sound at a time
   $("#tv-name").textContent = r.name; $("#tv-msg").textContent = "Loading…"; $("#tv-msg").hidden = false;
   const v = $("#tv-video");
   v.onplaying = () => { $("#tv-msg").hidden = true; };
-  v.onvolumechange = () => {   // subtitles only when the sound is off
-    const quiet = v.muted || v.volume === 0;
-    if (tvHls) { tvHls.subtitleDisplay = quiet; if (quiet && tvHls.subtitleTrack < 0 && tvHls.subtitleTracks?.length) tvHls.subtitleTrack = Math.max(0, tvHls.subtitleTracks.findIndex((t) => /^fr/i.test(t.lang || ""))); }
-    [...v.textTracks].forEach((t, i) => { t.mode = quiet && (/^fr/i.test(t.language) || i === 0) ? "showing" : "disabled"; });
+  // subtitles: on when the CC button is on (remembered) OR the sound is muted in the player.
+  // The iPhone's volume buttons / silent switch can't be seen by a web page, hence the CC button.
+  const applySubs = () => {
+    const on = store.get("hub-tv-cc", false) || v.muted || v.volume === 0;
+    const btn = $("#tv-cc"); if (btn) { btn.classList.toggle("on", on); btn.setAttribute("aria-pressed", on); }
+    if (tvHls) { tvHls.subtitleDisplay = on; if (on && tvHls.subtitleTrack < 0 && tvHls.subtitleTracks?.length) tvHls.subtitleTrack = Math.max(0, tvHls.subtitleTracks.findIndex((t) => /^fr/i.test(t.lang || ""))); }
+    const tracks = [...v.textTracks].filter((t) => t.kind === "subtitles" || t.kind === "captions");
+    const pick = Math.max(0, tracks.findIndex((t) => /^fr/i.test(t.language)));
+    tracks.forEach((t, i) => { t.mode = on && i === pick ? "showing" : "disabled"; });
+    return tracks.length + (tvHls?.subtitleTracks?.length || 0);
   };
-  v.onloadedmetadata = () => v.onvolumechange();   // started without sound (autoplay) -> subtitles right away
+  v.onvolumechange = applySubs;
+  v.onloadedmetadata = applySubs;            // started without sound (autoplay) -> subtitles right away
+  v.textTracks.onaddtrack = applySubs;       // Safari adds the tracks after the metadata
+  $("#tv-cc").onclick = () => {
+    store.set("hub-tv-cc", !store.get("hub-tv-cc", false));
+    if (!applySubs() && store.get("hub-tv-cc", false)) { $("#tv-msg").hidden = false; $("#tv-msg").textContent = "Pas de sous-titres sur cette chaîne."; setTimeout(() => { $("#tv-msg").hidden = true; }, 3000); }
+  };
   tvHls?.destroy(); tvHls = null;
   if (window.Hls && Hls.isSupported()) {
     // best picture: start at the highest quality and never cap it to the player size
     tvHls = new Hls({ subtitleDisplay: false, lowLatencyMode: false, backBufferLength: 30, capLevelToPlayerSize: false, abrEwmaDefaultEstimate: 12e6, startLevel: -1 });
     tvHls.on(Hls.Events.MANIFEST_PARSED, (_, data) => { if (data.levels?.length > 1) { tvHls.startLevel = data.levels.length - 1; tvHls.nextLevel = data.levels.length - 1; } });
+    tvHls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, applySubs);
     tvHls.on(Hls.Events.ERROR, (_, e) => { if (e.fatal) { $("#tv-msg").hidden = false; $("#tv-msg").textContent = "This channel is off the air right now — try another one."; } });
     tvHls.loadSource(r.src); tvHls.attachMedia(v);
   } else { v.src = r.src; }   // Safari / iPhone play HLS natively
