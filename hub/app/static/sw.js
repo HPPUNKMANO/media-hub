@@ -1,6 +1,6 @@
 // Media Hub service worker: makes the hub installable as an app and opens instantly.
 // Network first (always fresh), falls back to the cached shell when the server is unreachable.
-const CACHE = "hub-shell-v24";
+const CACHE = "hub-shell-v25";
 const SHELL = ["/", "/static/styles.css", "/static/app.js", "/static/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

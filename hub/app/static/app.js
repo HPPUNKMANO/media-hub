@@ -346,13 +346,32 @@ async function playTV(id) {
   };
   tvHls?.destroy(); tvHls = null;
   if (window.Hls && Hls.isSupported()) {
-    // best picture: start at the highest quality and never cap it to the player size
-    tvHls = new Hls({ subtitleDisplay: false, lowLatencyMode: false, backBufferLength: 30, capLevelToPlayerSize: false, abrEwmaDefaultEstimate: 12e6, startLevel: -1 });
-    tvHls.on(Hls.Events.MANIFEST_PARSED, (_, data) => { if (data.levels?.length > 1) { tvHls.startLevel = data.levels.length - 1; tvHls.nextLevel = data.levels.length - 1; } });
+    // Stable first: hls.js picks the quality from the measured speed and can always step DOWN when the connection
+    // weakens (before, the top quality was forced as a manual level, so ABR was off and weak links froze), and it
+    // starts high on a good link. It stays a few segments behind live so short hiccups don't freeze the picture.
+    tvHls = new Hls({ subtitleDisplay: false, lowLatencyMode: false, backBufferLength: 30, capLevelToPlayerSize: false,
+      abrEwmaDefaultEstimate: 5e6, startLevel: -1, liveSyncDurationCount: 4, maxBufferLength: 30, maxMaxBufferLength: 60,
+      fragLoadPolicy: { default: { maxTimeToFirstByteMs: 10000, maxLoadTimeMs: 30000,
+        timeoutRetry: { maxNumRetry: 4, retryDelayMs: 0, maxRetryDelayMs: 0 },
+        errorRetry: { maxNumRetry: 6, retryDelayMs: 1000, maxRetryDelayMs: 8000 } } } });
     tvHls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, applySubs);
-    tvHls.on(Hls.Events.ERROR, (_, e) => { if (e.fatal) { $("#tv-msg").hidden = false; $("#tv-msg").textContent = "This channel is off the air right now — try another one."; } });
+    let fails = 0;
+    tvHls.on(Hls.Events.FRAG_LOADED, () => { fails = 0; });
+    tvHls.on(Hls.Events.ERROR, (_, e) => {
+      if (!e.fatal) return;
+      const hls = tvHls;
+      if (++fails <= 6 && e.type === Hls.ErrorTypes.NETWORK_ERROR) {   // connection dropped: try again, without giving up
+        $("#tv-msg").hidden = false; $("#tv-msg").textContent = "Connexion instable — reconnexion…";
+        setTimeout(() => { if (tvHls === hls) hls.startLoad(); }, Math.min(1000 * fails, 5000));
+      } else if (fails <= 6 && e.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        hls.recoverMediaError();
+      } else { $("#tv-msg").hidden = false; $("#tv-msg").textContent = "This channel is off the air right now — try another one."; }
+    });
     tvHls.loadSource(r.src); tvHls.attachMedia(v);
-  } else { v.src = r.src; }   // Safari / iPhone play HLS natively
+  } else {   // Safari / iPhone play HLS natively: if the stream drops, reload it (a few times)
+    v.src = r.src; let tries = 0;
+    v.onerror = () => { if (++tries <= 4 && tvNow?.id === id) setTimeout(() => { v.src = r.src; v.play().catch(() => {}); }, 1500 * tries); };
+  }
   v.play().catch(() => {});
   store.set("hub-tv-last", id); syncTvDock(); markTv();
 }
