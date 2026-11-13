@@ -730,11 +730,11 @@ const pages = {
     const days = byDay(d.big || []);
     d.tv_now = (d.tv_now || []).filter(okTV); d.tv_next = (d.tv_next || []).filter(okTV);   // nothing paid
     $("#sp").innerHTML =
+      // 0. on French TV right now, first: which channel shows which match (free ones play here)
+      (d.tv_now?.length ? `<h2><span class="live-dot">●</span> À la télé en ce moment <small>${d.tv_now.length} retransmission${d.tv_now.length > 1 ? "s" : ""} · chaîne indiquée</small></h2><div class="epg">${d.tv_now.map(epgRow).join("")}</div>` : "") +
       // 1. free official streams, live now
       (d.streams?.length ? `<h2><span class="live-dot">●</span> En direct · gratuit <small>${d.streams.length} direct${d.streams.length > 1 ? "s" : ""}, ça se regarde ici</small></h2><div class="vid-grid">${d.streams.map(liveCard).join("")}</div>`
         : `<h2>En direct · gratuit</h2><div class="empty">Aucun direct gratuit en ${esc(what)} en ce moment. Les directs programmés sont plus bas. La page vérifie toute seule.</div>`) +
-      // 1b. on French TV right now (free ones play here)
-      (d.tv_now?.length ? `<h2><span class="live-dot">●</span> À la télé en ce moment <small>${d.tv_now.length} retransmission${d.tv_now.length > 1 ? "s" : ""}</small></h2><div class="epg">${d.tv_now.map(epgRow).join("")}</div>` : "") +
       // 2. live scores of the big competitions
       (d.live?.length ? `<h2><span class="live-dot">●</span> Scores en direct <small>${d.live.length} match${d.live.length > 1 ? "s" : ""}</small></h2><div class="mc-grid">${d.live.map(matchCard).join("")}</div>` : "") +
       // 3. the big matches coming up, day by day

@@ -1,5 +1,5 @@
 """Sport: live scores + the big matches (ESPN's public scoreboards, no key) and the free, official live
-streams of the sport channels on YouTube (padel, table tennis, darts, basketball, tennis, football, F1),
+streams of the sport channels on YouTube (padel, table tennis, darts, basketball, tennis, football, F1, cycling),
 played inside the hub. Nothing here is a pirate stream: big paid matches show score + time only.
 
 Ranking: every match gets a weight (competition + how famous the teams/players are), so the big
@@ -64,6 +64,7 @@ LIVE_CHANNELS = [
     ("@KingsLeagueFrance", "foot"), ("@FFF", "foot"), ("@DAZNFootball", "foot"), ("@Ligue1", "foot"),
     ("@TennisTV", "tennis"), ("@ATPTour", "tennis"), ("@WTA", "tennis"),
     ("@Formula1", "f1"), ("@F1Academy", "f1"),
+    ("@letourdefrance", "velo"), ("@giroditalia", "velo"), ("@GCNRacing", "velo"),   # ASO (Tour, Paris-Roubaix…), RCS (Giro, Strade Bianche…), GCN race coverage
     ("@FranceRugby", "rugby"), ("@ehfeuro", "hand"), ("@StarHandball", "hand"), ("@WorldAthletics", "athle"),
     ("@UFC", "combat"), ("@HexagoneMMA", "combat"), ("@NFL", "nfl"), ("@RedBull", "autre"), ("@LEquipe", "autre"),
 ]
@@ -297,7 +298,7 @@ async def _mark(items: list[dict]) -> list[dict]:
 
 
 async def channels() -> list[dict]:
-    return await youtube._channels("sport_channels_v2", LIVE_CHANNELS)
+    return await youtube._channels("sport_channels_v3", LIVE_CHANNELS)
 
 
 async def lives() -> dict:
